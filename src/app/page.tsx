@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ConnectionConfig, TableSchema, QueryResult } from '@/types/database';
-import { ConnectionManager } from '@/components/ConnectionManager';
+import { ConnectionSession, TableSchema, QueryResult } from '@/types/database';
+import { SecureConnectionManager } from '@/components/SecureConnectionManager';
 import { DatabaseExplorer } from '@/components/DatabaseExplorer';
 import { QueryEditor } from '@/components/QueryEditor';
 import { LLMQueryGenerator } from '@/components/LLMQueryGenerator';
@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Database, Code, Brain, Settings, History } from 'lucide-react';
 
 export default function Dashboard() {
-  const [selectedConnection, setSelectedConnection] = useState<ConnectionConfig | undefined>();
+  const [selectedSession, setSelectedSession] = useState<ConnectionSession | null>(null);
   const [availableTables, setAvailableTables] = useState<string[]>([]);
   const [tableSchemas, setTableSchemas] = useState<Record<string, TableSchema>>({});
   const [queryToExecute, setQueryToExecute] = useState('');
@@ -22,21 +22,20 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('query');
 
   useEffect(() => {
-    if (selectedConnection) {
+    if (selectedSession) {
       loadTables();
     }
-  }, [selectedConnection]);
+  }, [selectedSession]);
 
   const loadTables = async () => {
-    if (!selectedConnection) return;
+    if (!selectedSession) return;
 
     try {
-      const params = new URLSearchParams({
-        action: 'tables',
-        config: JSON.stringify(selectedConnection),
+      const response = await fetch('/api/query?action=tables', {
+        headers: {
+          'Authorization': `Bearer ${selectedSession.sessionId}`
+        }
       });
-      
-      const response = await fetch(`/api/query?${params}`);
       const result = await response.json();
       
       if (result.tables) {
@@ -50,7 +49,7 @@ export default function Dashboard() {
   };
 
   const loadTableSchemas = async (tables: string[]) => {
-    if (!selectedConnection) return;
+    if (!selectedSession) return;
 
     console.log('Loading schemas for tables:', tables);
     setLoadingSchemas(true);
@@ -62,13 +61,11 @@ export default function Dashboard() {
       for (const tableName of tables) {
         try {
           console.log(`Loading schema for table: ${tableName}`);
-          const params = new URLSearchParams({
-            action: 'schema',
-            table: tableName,
-            config: JSON.stringify(selectedConnection),
+          const response = await fetch(`/api/query?action=schema&table=${tableName}`, {
+            headers: {
+              'Authorization': `Bearer ${selectedSession.sessionId}`
+            }
           });
-          
-          const response = await fetch(`/api/query?${params}`);
           const result = await response.json();
           
           console.log(`Schema result for ${tableName}:`, result);
@@ -126,13 +123,13 @@ export default function Dashboard() {
           </div>
           
           <div className="flex items-center space-x-4">
-            {selectedConnection && (
+            {selectedSession && (
               <div className="flex items-center space-x-2">
                 <Badge variant="outline" className="flex items-center space-x-1">
                   <Database className="w-3 h-3" />
-                  <span>{selectedConnection.name}</span>
+                  <span>{selectedSession.name}</span>
                 </Badge>
-                <Badge variant="secondary">{selectedConnection.type}</Badge>
+                <Badge variant="secondary">{selectedSession.type}</Badge>
               </div>
             )}
             <ThemeToggle />
@@ -157,23 +154,23 @@ export default function Dashboard() {
               </TabsList>
               
               <TabsContent value="connections" className="mt-4">
-                <ConnectionManager 
-                  onConnectionSelect={setSelectedConnection}
-                  selectedConnection={selectedConnection}
+                <SecureConnectionManager 
+                  onSessionSelect={setSelectedSession}
+                  selectedSession={selectedSession}
                 />
               </TabsContent>
               
               <TabsContent value="explorer" className="mt-4">
-                {selectedConnection ? (
+                {selectedSession ? (
                   <DatabaseExplorer 
-                    connection={selectedConnection}
+                    session={selectedSession}
                     onTableSelect={handleTableSelect}
                   />
                 ) : (
                   <Card>
                     <CardContent className="p-6 text-center">
                       <Database className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                      <p className="text-muted-foreground">Select a connection to explore the database</p>
+                      <p className="text-muted-foreground">Create a secure session to explore the database</p>
                     </CardContent>
                   </Card>
                 )}
@@ -184,7 +181,7 @@ export default function Dashboard() {
 
         {/* Main Content */}
         <main className="flex-1 min-w-0 p-4 lg:p-6 space-y-4 lg:space-y-6">
-          {selectedConnection ? (
+          {selectedSession ? (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full max-w-full space-y-4 lg:space-y-6">
               <TabsList className="w-full sm:w-auto">
                 <TabsTrigger value="query" className="flex items-center space-x-2 flex-1 sm:flex-none">
@@ -203,7 +200,7 @@ export default function Dashboard() {
               
               <TabsContent value="query" className="w-full">
                 <QueryEditor 
-                  connection={selectedConnection}
+                  session={selectedSession}
                   onQueryExecute={handleQueryExecuted}
                   initialQuery={queryToExecute}
                   availableTables={availableTables}
@@ -221,7 +218,7 @@ export default function Dashboard() {
                   </Card>
                 ) : (
                   <LLMQueryGenerator 
-                    connection={selectedConnection}
+                    session={selectedSession}
                     availableTables={availableTables}
                     tableSchemas={tableSchemas}
                     onQueryGenerated={handleQueryGenerated}
@@ -236,12 +233,12 @@ export default function Dashboard() {
                     setQueryToExecute(query);
                     setActiveTab('query');
                   }}
-                  onAIPromptSelect={(prompt, tables) => {
+                  onAIPromptSelect={(_prompt, _tables) => {
                     // Switch to AI tab and pre-fill the prompt
                     setActiveTab('ai');
                     // Note: We'd need to expose methods to set prompt and tables in LLMQueryGenerator
                   }}
-                  currentConnection={selectedConnection?.name}
+                  currentSession={selectedSession}
                 />
               </TabsContent>
             </Tabs>

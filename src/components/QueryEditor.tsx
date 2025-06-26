@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { ConnectionConfig, QueryResult } from '@/types/database';
+import { ConnectionSession, QueryResult } from '@/types/database';
 import { queryHistoryManager } from '@/lib/query-history';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,14 +23,14 @@ interface QueryTab {
 }
 
 interface QueryEditorProps {
-  connection?: ConnectionConfig;
+  session?: ConnectionSession;
   onQueryExecute?: (query: string, result: QueryResult) => void;
   initialQuery?: string;
   availableTables?: string[];
   tableSchemas?: Record<string, any>;
 }
 
-export function QueryEditor({ connection, onQueryExecute, initialQuery = '', availableTables = [], tableSchemas = {} }: QueryEditorProps) {
+export function QueryEditor({ session, onQueryExecute, initialQuery = '', availableTables = [], tableSchemas = {} }: QueryEditorProps) {
   const [tabs, setTabs] = useState<QueryTab[]>([
     { id: '1', title: 'Query 1', query: initialQuery }
   ]);
@@ -48,15 +48,17 @@ export function QueryEditor({ connection, onQueryExecute, initialQuery = '', ava
       ));
       
       // Auto-execute the query after a brief delay to ensure the query is set
-      if (connection) {
+      if (session) {
         setTimeout(async () => {
           try {
             const response = await fetch('/api/query', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.sessionId}`
+              },
               body: JSON.stringify({
                 query: initialQuery,
-                config: connection,
               }),
             });
 
@@ -82,16 +84,16 @@ export function QueryEditor({ connection, onQueryExecute, initialQuery = '', ava
                }
 
                // Add to persistent history for auto-executed queries
-               if (connection) {
+               if (session) {
                  queryHistoryManager.addQueryToHistory({
                    type: 'ai-generated',
                    query: initialQuery,
                    result,
                    executionTime: result.executionTime,
                    connection: {
-                     name: connection.name,
-                     type: connection.type,
-                     database: connection.database,
+                     name: session.name,
+                     type: session.type,
+                     database: session.database,
                    },
                  });
                }
@@ -102,7 +104,7 @@ export function QueryEditor({ connection, onQueryExecute, initialQuery = '', ava
         }, 200);
       }
     }
-  }, [initialQuery, connection, activeTab, onQueryExecute]);
+  }, [initialQuery, session, activeTab, onQueryExecute]);
 
   const updateActiveTab = useCallback((updates: Partial<QueryTab>) => {
     setTabs(prev => prev.map(tab => 
@@ -111,17 +113,19 @@ export function QueryEditor({ connection, onQueryExecute, initialQuery = '', ava
   }, [activeTab]);
 
   const executeQuery = async () => {
-    if (!connection || !activeTabData?.query.trim()) return;
+    if (!session || !activeTabData?.query.trim()) return;
 
     updateActiveTab({ isExecuting: true, result: undefined });
 
     try {
       const response = await fetch('/api/query', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.sessionId}`
+        },
         body: JSON.stringify({
           query: activeTabData.query,
-          config: connection,
         }),
       });
 
@@ -141,16 +145,16 @@ export function QueryEditor({ connection, onQueryExecute, initialQuery = '', ava
         ]);
 
         // Add to persistent history
-        if (connection) {
+        if (session) {
           queryHistoryManager.addQueryToHistory({
             type: 'sql',
             query: activeTabData.query,
             result,
             executionTime: result.executionTime,
             connection: {
-              name: connection.name,
-              type: connection.type,
-              database: connection.database,
+              name: session.name,
+              type: session.type,
+              database: session.database,
             },
           });
         }
@@ -229,8 +233,8 @@ export function QueryEditor({ connection, onQueryExecute, initialQuery = '', ava
             <CardTitle className="flex items-center space-x-2 min-w-0">
               <Database className="w-5 h-5 flex-shrink-0" />
               <span className="truncate">SQL Query Editor</span>
-              {connection && (
-                <Badge variant="outline" className="hidden sm:inline-flex">{connection.name}</Badge>
+              {session && (
+                <Badge variant="outline" className="hidden sm:inline-flex">{session.name}</Badge>
               )}
             </CardTitle>
             <div className="flex space-x-2 flex-shrink-0">
@@ -240,7 +244,7 @@ export function QueryEditor({ connection, onQueryExecute, initialQuery = '', ava
               </Button>
               <Button 
                 onClick={executeQuery} 
-                disabled={!connection || activeTabData?.isExecuting}
+                disabled={!session || activeTabData?.isExecuting}
                 size="sm"
               >
                 <Play className="w-4 h-4 mr-2" />

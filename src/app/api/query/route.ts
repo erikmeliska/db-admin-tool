@@ -1,19 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { connectionManager } from '@/lib/database/connections';
-import { ConnectionConfig } from '@/types/database';
+import { sessionManager } from '@/lib/session-manager';
 
 export async function POST(request: NextRequest) {
   try {
-    const { query, config }: { query: string; config: ConnectionConfig } = await request.json();
+    const { query }: { query: string } = await request.json();
+    const authHeader = request.headers.get('authorization');
+    const sessionId = authHeader?.replace('Bearer ', '');
     
-    if (!query || !config) {
+    if (!query) {
       return NextResponse.json(
-        { error: 'Query and connection config are required' },
+        { error: 'Query is required' },
         { status: 400 }
       );
     }
+    
+    if (!sessionId) {
+      return NextResponse.json(
+        { error: 'Authorization header with session ID is required' },
+        { status: 401 }
+      );
+    }
 
-    const connection = connectionManager.createConnection(config);
+    // Validate session
+    const session = sessionManager.getSession(sessionId);
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Invalid or expired session' },
+        { status: 401 }
+      );
+    }
+
+    const connection = await sessionManager.getConnection(sessionId);
     await connection.connect();
     
     try {
@@ -37,18 +54,27 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
-    const configStr = searchParams.get('config');
     const tableName = searchParams.get('table');
+    const authHeader = request.headers.get('authorization');
+    const sessionId = authHeader?.replace('Bearer ', '');
     
-    if (!configStr) {
+    if (!sessionId) {
       return NextResponse.json(
-        { error: 'Connection config required' },
-        { status: 400 }
+        { error: 'Authorization header with session ID is required' },
+        { status: 401 }
       );
     }
 
-    const config: ConnectionConfig = JSON.parse(configStr);
-    const connection = connectionManager.createConnection(config);
+    // Validate session
+    const session = sessionManager.getSession(sessionId);
+    if (!session) {
+      return NextResponse.json(
+        { error: 'Invalid or expired session' },
+        { status: 401 }
+      );
+    }
+
+    const connection = await sessionManager.getConnection(sessionId);
     await connection.connect();
     
     try {

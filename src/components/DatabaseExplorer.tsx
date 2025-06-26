@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ConnectionConfig, TableSchema } from '@/types/database';
+import { ConnectionSession, TableSchema } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,11 +11,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Database, Search, Table as TableIcon, Key, Hash } from 'lucide-react';
 
 interface DatabaseExplorerProps {
-  connection: ConnectionConfig;
+  session: ConnectionSession;
   onTableSelect?: (tableName: string, schema: TableSchema) => void;
 }
 
-export function DatabaseExplorer({ connection, onTableSelect }: DatabaseExplorerProps) {
+export function DatabaseExplorer({ session, onTableSelect }: DatabaseExplorerProps) {
   const [tables, setTables] = useState<string[]>([]);
   const [schemas, setSchemas] = useState<Record<string, TableSchema>>({});
   const [loading, setLoading] = useState(true);
@@ -24,17 +24,16 @@ export function DatabaseExplorer({ connection, onTableSelect }: DatabaseExplorer
 
   useEffect(() => {
     loadTables();
-  }, [connection]);
+  }, [session]);
 
   const loadTables = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({
-        action: 'tables',
-        config: JSON.stringify(connection),
+      const response = await fetch('/api/query?action=tables', {
+        headers: {
+          'Authorization': `Bearer ${session.sessionId}`
+        }
       });
-      
-      const response = await fetch(`/api/query?${params}`);
       const result = await response.json();
       
       if (result.tables) {
@@ -54,13 +53,11 @@ export function DatabaseExplorer({ connection, onTableSelect }: DatabaseExplorer
 
     setLoadingSchema(tableName);
     try {
-      const params = new URLSearchParams({
-        action: 'schema',
-        table: tableName,
-        config: JSON.stringify(connection),
+      const response = await fetch(`/api/query?action=schema&table=${tableName}`, {
+        headers: {
+          'Authorization': `Bearer ${session.sessionId}`
+        }
       });
-      
-      const response = await fetch(`/api/query?${params}`);
       const result = await response.json();
       
       if (result.schema) {
@@ -118,7 +115,7 @@ export function DatabaseExplorer({ connection, onTableSelect }: DatabaseExplorer
         <CardTitle className="flex items-center space-x-2">
           <Database className="w-5 h-5" />
           <span>Database Explorer</span>
-          <Badge variant="outline">{connection.name}</Badge>
+          <Badge variant="outline">{session.name}</Badge>
         </CardTitle>
         <div className="relative">
           <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />

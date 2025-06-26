@@ -11,6 +11,18 @@ export interface ConnectionConfig {
   password?: string;
   filename?: string; // for SQLite
   server?: string; // for MySQL proxy - the actual server to connect to
+  proxyUrl?: string;
+  mysqlServer?: string;
+}
+
+// Session-based connection for secure API calls
+export interface ConnectionSession {
+  sessionId: string;
+  name: string;
+  type: DatabaseType;
+  database: string;
+  createdAt: Date;
+  expiresAt: Date;
 }
 
 export interface TableSchema {
@@ -25,7 +37,7 @@ export interface ColumnInfo {
   type: string;
   nullable: boolean;
   key?: string;
-  default?: unknown;
+  default?: any;
   autoIncrement?: boolean;
 }
 
@@ -44,7 +56,8 @@ export interface ForeignKeyInfo {
 
 export interface QueryResult {
   columns: string[];
-  rows: Record<string, unknown>[];
+  rows: any[];
   affectedRows?: number;
   executionTime: number;
+  error?: string;
 } 

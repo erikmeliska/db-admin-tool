@@ -1,13 +1,22 @@
 # Database Admin Tool
 
-A modern, AI-powered database administration tool built with Next.js, featuring intelligent query generation, comprehensive history tracking, and multi-database support.
+A modern, AI-powered database administration tool built with Next.js, featuring intelligent query generation, comprehensive history tracking, multi-database support, and **enterprise-grade security**.
 
 ![Database Admin Tool](https://img.shields.io/badge/Database-Admin_Tool-blue.svg)
 ![Next.js](https://img.shields.io/badge/Next.js-15-black.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue.svg)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3-38B2AC.svg)
+![Security](https://img.shields.io/badge/Security-Enterprise_Grade-green.svg)
 
 ## ✨ Features
+
+### 🔒 **Enterprise Security Architecture**
+- **Session-based authentication** - No credentials in API requests
+- **Authorization headers** - Industry-standard Bearer token authentication
+- **Server-side credential storage** - Credentials never transmitted after session creation
+- **Automatic session expiration** - 24-hour security timeout
+- **Session revocation** - Immediate access termination capability
+- **Docker security** - Non-root user, minimal attack surface
 
 ### 🗄️ **Multi-Database Support**
 - **MySQL** - Direct connections and proxy support
@@ -41,7 +50,7 @@ A modern, AI-powered database administration tool built with Next.js, featuring 
 - **Responsive design** for all devices
 - **Real-time** query execution and results
 - **Schema explorer** with expandable table structures
-- **Connection management** with test capabilities
+- **Secure connection management** with session-based authentication
 
 ## 🚀 Quick Start
 
@@ -81,6 +90,26 @@ A modern, AI-powered database administration tool built with Next.js, featuring 
 5. **Open your browser**
    Navigate to [http://localhost:3000](http://localhost:3000)
 
+## 🐳 Docker Deployment
+
+### Quick Start
+```bash
+# Using Docker Compose
+docker-compose up -d
+
+# Or manually
+docker build -t db-admin-tool .
+docker run -d -p 8008:8008 -e GOOGLE_API_KEY=your_key db-admin-tool
+```
+
+**Image Details:**
+- Size: ~203MB (optimized multi-stage build)
+- Base: Node 20 Alpine
+- Security: Non-root user execution
+- Port: 8008
+
+See [`.cursor/docker.md`](.cursor/docker.md) for detailed deployment instructions.
+
 ## 🔧 Configuration
 
 ### Environment Variables
@@ -89,11 +118,18 @@ A modern, AI-powered database administration tool built with Next.js, featuring 
 |----------|-------------|----------|
 | `GOOGLE_API_KEY` | Google AI API key for Gemini integration | Yes |
 
-### Database Connections
+### Secure Database Connections
 
-The tool supports multiple connection types:
+The tool uses a **session-based security model**:
 
-#### MySQL/PostgreSQL
+1. **Create Session**: Enter credentials once to establish a secure session
+2. **Use Session**: All subsequent operations use session tokens
+3. **Automatic Expiry**: Sessions expire after 24 hours
+4. **Manual Revocation**: Sessions can be terminated immediately
+
+#### Connection Types
+
+**MySQL/PostgreSQL**
 ```typescript
 {
   name: "My Database",
@@ -102,11 +138,11 @@ The tool supports multiple connection types:
   port: 3306,
   database: "my_db",
   username: "user",
-  password: "password"
+  password: "password" // Only sent during session creation
 }
 ```
 
-#### SQLite
+**SQLite**
 ```typescript
 {
   name: "Local DB",
@@ -115,13 +151,13 @@ The tool supports multiple connection types:
 }
 ```
 
-#### MySQL Proxy
+**MySQL Proxy**
 ```typescript
 {
   name: "Proxy DB",
   type: "mysql-proxy",
-  host: "https://your-proxy-api.com/db",
-  server: "mysql-server-name",
+  host: "https://your-proxy-api.com/db", // Proxy URL
+  server: "mysql-server-name",           // Actual MySQL server
   database: "database_name",
   username: "proxy_user",
   password: "proxy_password"
@@ -130,11 +166,12 @@ The tool supports multiple connection types:
 
 ## 📚 Usage Guide
 
-### 1. **Database Connection**
-- Navigate to the **Connections** tab in the sidebar
-- Click **"Add New Connection"**
-- Fill in your database details
-- Test the connection before saving
+### 1. **Secure Session Management**
+- Navigate to the **Secure Database Sessions** section
+- Click **"New Session"** to create a secure connection
+- Enter credentials once - they're stored securely on the server
+- Session tokens are used for all subsequent operations
+- Sessions auto-expire after 24 hours or can be manually revoked
 
 ### 2. **Query Execution**
 - Use the **Query Editor** tab to write SQL
@@ -161,6 +198,26 @@ The tool supports multiple connection types:
 - View column details, types, and constraints
 - Click any table to generate a basic SELECT query
 
+## 🔒 Security
+
+This application implements **enterprise-grade security**:
+
+- ✅ **Session-based authentication** - No credentials in API requests
+- ✅ **Authorization headers** - Bearer token authentication
+- ✅ **Server-side credential storage** - Credentials never transmitted after initial session
+- ✅ **Automatic session expiration** - 24-hour timeout
+- ✅ **Manual session revocation** - Immediate access termination
+- ✅ **Docker security** - Non-root user execution
+- ✅ **Minimal attack surface** - Optimized for security
+
+**Previous vulnerabilities (now fixed):**
+- ❌ Database passwords in every HTTP request
+- ❌ Credentials in network traffic and logs
+- ❌ Credentials stored in browser memory
+- ❌ No session management or access control
+
+See [`.cursor/security.md`](.cursor/security.md) for detailed security architecture.
+
 ## 🛠️ Development
 
 ### Project Structure
@@ -169,15 +226,15 @@ The tool supports multiple connection types:
 src/
 ├── app/                    # Next.js app router
 │   ├── api/               # API routes
-│   │   ├── connections/   # Connection testing
-│   │   ├── query/         # Query execution
+│   │   ├── sessions/      # Secure session management
+│   │   ├── query/         # Query execution with session auth
 │   │   └── llm/          # AI query generation
 │   ├── globals.css        # Global styles
 │   ├── layout.tsx         # Root layout
 │   └── page.tsx          # Main dashboard
 ├── components/            # React components
 │   ├── ui/               # shadcn/ui components
-│   ├── ConnectionManager.tsx
+│   ├── SecureConnectionManager.tsx # Session-based connections
 │   ├── DatabaseExplorer.tsx
 │   ├── LLMQueryGenerator.tsx
 │   ├── QueryEditor.tsx
@@ -185,6 +242,7 @@ src/
 │   └── ThemeProvider.tsx
 ├── lib/                  # Utility libraries
 │   ├── database/         # Database connections
+│   ├── session-manager.ts # Secure session handling
 │   ├── llm/             # AI query generation
 │   ├── query-history.ts  # History management
 │   └── sql-completions.ts # Autocomplete logic
@@ -198,40 +256,27 @@ src/
 - **TypeScript** - Type safety and developer experience
 - **Tailwind CSS** - Utility-first CSS framework
 - **shadcn/ui** - High-quality React components
-- **CodeMirror 6** - Advanced code editor
-- **Google Generative AI** - AI query generation
-- **Database Drivers** - mysql2, pg, better-sqlite3
+- **CodeMirror** - Advanced SQL editor
+- **Google AI (Gemini)** - Natural language to SQL
 
-### Building for Production
+## 📄 Documentation
 
-```bash
-npm run build
-npm start
-```
+- [Security Architecture](.cursor/security.md) - Detailed security implementation
+- [Docker Deployment](.cursor/docker.md) - Container deployment guide
+- [Development Instructions](.cursor/instructions.md) - Development setup and guidelines
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+2. Create a feature branch
+3. Make your changes
+4. Ensure security best practices
+5. Submit a pull request
 
-## 📄 License
+## 📜 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- **Google AI** for Gemini 2.0 Flash Lite
-- **shadcn/ui** for beautiful React components
-- **CodeMirror** for the excellent code editor
-- **Next.js** team for the amazing framework
-
-## 📞 Support
-
-For support, please open an issue on GitHub or contact the development team.
+This project is licensed under the MIT License.
 
 ---
 
-**Built with ❤️ using Next.js and modern web technologies**
+**Built with security in mind** 🔒 | **AI-powered** 🤖 | **Developer-friendly** 🛠️
