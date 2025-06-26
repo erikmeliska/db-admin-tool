@@ -1,103 +1,296 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useState, useEffect } from 'react';
+import { ConnectionConfig, TableSchema, QueryResult } from '@/types/database';
+import { ConnectionManager } from '@/components/ConnectionManager';
+import { DatabaseExplorer } from '@/components/DatabaseExplorer';
+import { QueryEditor } from '@/components/QueryEditor';
+import { LLMQueryGenerator } from '@/components/LLMQueryGenerator';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { QueryHistory } from '@/components/QueryHistory';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Database, Code, Brain, Settings, History } from 'lucide-react';
+
+export default function Dashboard() {
+  const [selectedConnection, setSelectedConnection] = useState<ConnectionConfig | undefined>();
+  const [availableTables, setAvailableTables] = useState<string[]>([]);
+  const [tableSchemas, setTableSchemas] = useState<Record<string, TableSchema>>({});
+  const [queryToExecute, setQueryToExecute] = useState('');
+  const [loadingSchemas, setLoadingSchemas] = useState(false);
+  const [activeTab, setActiveTab] = useState('query');
+
+  useEffect(() => {
+    if (selectedConnection) {
+      loadTables();
+    }
+  }, [selectedConnection]);
+
+  const loadTables = async () => {
+    if (!selectedConnection) return;
+
+    try {
+      const params = new URLSearchParams({
+        action: 'tables',
+        config: JSON.stringify(selectedConnection),
+      });
+      
+      const response = await fetch(`/api/query?${params}`);
+      const result = await response.json();
+      
+      if (result.tables) {
+        setAvailableTables(result.tables);
+        // Load schemas for all tables
+        await loadTableSchemas(result.tables);
+      }
+    } catch (error) {
+      console.error('Failed to load tables:', error);
+    }
+  };
+
+  const loadTableSchemas = async (tables: string[]) => {
+    if (!selectedConnection) return;
+
+    console.log('Loading schemas for tables:', tables);
+    setLoadingSchemas(true);
+
+    try {
+      const schemas: Record<string, TableSchema> = {};
+      
+      // Load schema for each table
+      for (const tableName of tables) {
+        try {
+          console.log(`Loading schema for table: ${tableName}`);
+          const params = new URLSearchParams({
+            action: 'schema',
+            table: tableName,
+            config: JSON.stringify(selectedConnection),
+          });
+          
+          const response = await fetch(`/api/query?${params}`);
+          const result = await response.json();
+          
+          console.log(`Schema result for ${tableName}:`, result);
+          
+          if (result.schema) {
+            schemas[tableName] = result.schema;
+            console.log(`Added schema for ${tableName}:`, result.schema);
+          } else {
+            console.warn(`No schema returned for table ${tableName}`);
+          }
+        } catch (error) {
+          console.error(`Failed to load schema for table ${tableName}:`, error);
+        }
+      }
+      
+      console.log('Final schemas object:', schemas);
+      setTableSchemas(schemas);
+    } catch (error) {
+      console.error('Failed to load table schemas:', error);
+    } finally {
+      setLoadingSchemas(false);
+    }
+  };
+
+  const handleTableSelect = (tableName: string, schema: TableSchema) => {
+    setTableSchemas(prev => ({ ...prev, [tableName]: schema }));
+    // Generate a simple SELECT query for the selected table
+    setQueryToExecute(`SELECT * FROM ${tableName} LIMIT 10;`);
+  };
+
+  const handleQueryGenerated = (query: string) => {
+    setQueryToExecute(query);
+  };
+
+  const handleUseQuery = (query: string) => {
+    setQueryToExecute(query);
+    setActiveTab('query');
+  };
+
+  const handleQueryExecuted = (query: string, result: QueryResult) => {
+    console.log('Query executed:', query, result);
+  };
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="bg-card border-b border-border px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <Database className="w-8 h-8 text-primary" />
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Database Admin Tool</h1>
+              <p className="text-sm text-muted-foreground">Modern database management with AI assistance</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center space-x-4">
+            {selectedConnection && (
+              <div className="flex items-center space-x-2">
+                <Badge variant="outline" className="flex items-center space-x-1">
+                  <Database className="w-3 h-3" />
+                  <span>{selectedConnection.name}</span>
+                </Badge>
+                <Badge variant="secondary">{selectedConnection.type}</Badge>
+              </div>
+            )}
+            <ThemeToggle />
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </header>
+
+      <div className="flex">
+        {/* Sidebar */}
+        <aside className="w-80 flex-shrink-0 bg-card border-r border-border h-[calc(100vh-81px)] overflow-y-auto">
+          <div className="p-4 lg:p-6">
+            <Tabs defaultValue="connections" className="space-y-4">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="connections" className="flex items-center space-x-2">
+                  <Settings className="w-4 h-4" />
+                  <span>Connections</span>
+                </TabsTrigger>
+                <TabsTrigger value="explorer" className="flex items-center space-x-2">
+                  <Database className="w-4 h-4" />
+                  <span>Explorer</span>
+                </TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="connections" className="mt-4">
+                <ConnectionManager 
+                  onConnectionSelect={setSelectedConnection}
+                  selectedConnection={selectedConnection}
+                />
+              </TabsContent>
+              
+              <TabsContent value="explorer" className="mt-4">
+                {selectedConnection ? (
+                  <DatabaseExplorer 
+                    connection={selectedConnection}
+                    onTableSelect={handleTableSelect}
+                  />
+                ) : (
+                  <Card>
+                    <CardContent className="p-6 text-center">
+                      <Database className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                      <p className="text-muted-foreground">Select a connection to explore the database</p>
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+            </Tabs>
+          </div>
+        </aside>
+
+        {/* Main Content */}
+        <main className="flex-1 min-w-0 p-4 lg:p-6 space-y-4 lg:space-y-6">
+          {selectedConnection ? (
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full max-w-full space-y-4 lg:space-y-6">
+              <TabsList className="w-full sm:w-auto">
+                <TabsTrigger value="query" className="flex items-center space-x-2 flex-1 sm:flex-none">
+                  <Code className="w-4 h-4" />
+                  <span>Query Editor</span>
+                </TabsTrigger>
+                <TabsTrigger value="ai" className="flex items-center space-x-2 flex-1 sm:flex-none">
+                  <Brain className="w-4 h-4" />
+                  <span>AI Generator</span>
+                </TabsTrigger>
+                <TabsTrigger value="history" className="flex items-center space-x-2 flex-1 sm:flex-none">
+                  <History className="w-4 h-4" />
+                  <span>History</span>
+                </TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="query" className="w-full">
+                <QueryEditor 
+                  connection={selectedConnection}
+                  onQueryExecute={handleQueryExecuted}
+                  initialQuery={queryToExecute}
+                  availableTables={availableTables}
+                  tableSchemas={tableSchemas}
+                />
+              </TabsContent>
+              
+              <TabsContent value="ai" className="w-full">
+                {loadingSchemas ? (
+                  <Card>
+                    <CardContent className="p-6 text-center">
+                      <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2"></div>
+                      <p className="text-muted-foreground">Loading table schemas...</p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <LLMQueryGenerator 
+                    connection={selectedConnection}
+                    availableTables={availableTables}
+                    tableSchemas={tableSchemas}
+                    onQueryGenerated={handleQueryGenerated}
+                    onUseQuery={handleUseQuery}
+                  />
+                )}
+              </TabsContent>
+              
+              <TabsContent value="history" className="w-full">
+                <QueryHistory 
+                  onQuerySelect={(query) => {
+                    setQueryToExecute(query);
+                    setActiveTab('query');
+                  }}
+                  onAIPromptSelect={(prompt, tables) => {
+                    // Switch to AI tab and pre-fill the prompt
+                    setActiveTab('ai');
+                    // Note: We'd need to expose methods to set prompt and tables in LLMQueryGenerator
+                  }}
+                  currentConnection={selectedConnection?.name}
+                />
+              </TabsContent>
+            </Tabs>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Database className="w-6 h-6" />
+                  <span>Welcome to Database Admin Tool</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-muted-foreground">
+                  Get started by creating a database connection from the sidebar. This tool supports:
+                </p>
+                                 <div className="grid grid-cols-2 gap-4">
+                   <div className="flex items-center space-x-2">
+                     <Badge variant="outline">MySQL</Badge>
+                     <span className="text-sm">Direct & Proxy support</span>
+                   </div>
+                   <div className="flex items-center space-x-2">
+                     <Badge variant="outline">PostgreSQL</Badge>
+                     <span className="text-sm">Full featured support</span>
+                   </div>
+                   <div className="flex items-center space-x-2">
+                     <Badge variant="outline">SQLite</Badge>
+                     <span className="text-sm">Local database files</span>
+                   </div>
+                   <div className="flex items-center space-x-2">
+                     <Badge variant="outline">AI Powered</Badge>
+                     <span className="text-sm">Natural language queries</span>
+                   </div>
+                 </div>
+                
+                <div className="bg-muted/50 border border-border rounded-lg p-4">
+                  <h3 className="font-semibold text-foreground mb-2">Key Features:</h3>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    <li>• Visual database schema exploration</li>
+                    <li>• Advanced SQL query editor with syntax highlighting</li>
+                    <li>• AI-powered query generation from natural language</li>
+                    <li>• Query history and result export</li>
+                    <li>• Multiple database connections</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </main>
+      </div>
     </div>
   );
 }
