@@ -61,8 +61,6 @@ export async function generateSQLQuery(
   try {
     const prompt = generateQueryPrompt(description, schema, databaseType);
     
-    console.log(prompt);
-    
     const model = genAI.getGenerativeModel({ 
       model: MODEL,
       generationConfig: {
