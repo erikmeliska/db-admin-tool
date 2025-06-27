@@ -231,8 +231,8 @@ export function QueryHistory({ onQuerySelect, onAIPromptSelect, currentConnectio
                                 {formatExecutionTime(item.executionTime)}
                               </span>
                               <span>{item.connection.name} ({item.connection.type})</span>
-                              {item.result && (
-                                <span>{item.result.rows.length} rows</span>
+                              {item.resultMetadata && (
+                                <span>{item.resultMetadata.rowCount} rows</span>
                               )}
                             </div>
                           </>

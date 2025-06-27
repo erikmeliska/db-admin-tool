@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate session
-    const session = sessionManager.getSession(sessionId);
+    const session = await sessionManager.getSession(sessionId);
     if (!session) {
       return NextResponse.json(
         { error: 'Invalid or expired session' },
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Validate session
-    const session = sessionManager.getSession(sessionId);
+    const session = await sessionManager.getSession(sessionId);
     if (!session) {
       return NextResponse.json(
         { error: 'Invalid or expired session' },

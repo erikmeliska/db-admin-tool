@@ -20,6 +20,42 @@ export function SecureConnectionManager({ onSessionSelect, selectedSession }: Se
   const [sessions, setSessions] = useState<ConnectionSession[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Get browser-specific session IDs from localStorage
+  const getBrowserSessions = (): string[] => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('browser-sessions');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  // Save browser-specific session IDs to localStorage
+  const saveBrowserSessions = (sessionIds: string[]) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('browser-sessions', JSON.stringify(sessionIds));
+    }
+  };
+
+  // Add session ID to browser's session list
+  const addBrowserSession = (sessionId: string) => {
+    const current = getBrowserSessions();
+    if (!current.includes(sessionId)) {
+      const updated = [...current, sessionId];
+      saveBrowserSessions(updated);
+    }
+  };
+
+  // Remove session ID from browser's session list
+  const removeBrowserSession = (sessionId: string) => {
+    const current = getBrowserSessions();
+    const updated = current.filter(id => id !== sessionId);
+    saveBrowserSessions(updated);
+  };
+
+
   const [formData, setFormData] = useState<Partial<ConnectionConfig>>({
     type: 'mysql',
     host: 'localhost',
@@ -56,7 +92,15 @@ export function SecureConnectionManager({ onSessionSelect, selectedSession }: Se
       const response = await fetch('/api/sessions');
       if (response.ok) {
         const data = await response.json();
-        setSessions(data.sessions);
+        const allSessions = data.sessions || [];
+        
+        // Filter sessions to only show ones belonging to this browser
+        const browserSessionIds = getBrowserSessions();
+        const browserSessions = allSessions.filter((session: ConnectionSession) => 
+          browserSessionIds.includes(session.sessionId)
+        );
+        
+        setSessions(browserSessions);
       }
     } catch (error) {
       console.error('Failed to load sessions:', error);
@@ -94,6 +138,10 @@ export function SecureConnectionManager({ onSessionSelect, selectedSession }: Se
       if (response.ok) {
         const data = await response.json();
         // console.log('Session created successfully:', data.session);
+        
+        // Add session to browser's session list
+        addBrowserSession(data.session.sessionId);
+        
         setSessions(prev => [...prev, data.session]);
         setShowAddForm(false);
         setFormData({
@@ -130,6 +178,9 @@ export function SecureConnectionManager({ onSessionSelect, selectedSession }: Se
       });
 
       if (response.ok) {
+        // Remove session from browser's session list
+        removeBrowserSession(sessionId);
+        
         setSessions(prev => prev.filter(s => s.sessionId !== sessionId));
         if (selectedSession?.sessionId === sessionId) {
           onSessionSelect(null);

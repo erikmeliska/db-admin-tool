@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 // Get active sessions
 export async function GET() {
   try {
-    const sessions = sessionManager.getActiveSessions();
+    const sessions = await sessionManager.getActiveSessions();
     return NextResponse.json({ sessions });
   } catch (error) {
     return NextResponse.json(

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { ConnectionSession, QueryResult } from '@/types/database';
 import { queryHistoryManager } from '@/lib/query-history';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,6 +13,7 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import { autocompletion } from '@codemirror/autocomplete';
 import { createSQLCompletion } from '@/lib/sql-completions';
 import { useTheme } from '@/components/ThemeProvider';
+import { JsonCell } from '@/components/ui/json-cell';
 import { Play, Save, History, Clock, Database } from 'lucide-react';
 
 interface QueryTab {
@@ -38,6 +39,9 @@ export function QueryEditor({ session, onQueryExecute, initialQuery = '', availa
   ]);
   const [activeTab, setActiveTab] = useState('1');
   const [queryHistory, setQueryHistory] = useState<Array<{ query: string; timestamp: Date; executionTime: number }>>([]);
+
+  // Store current editor content without triggering re-renders
+  const editorContentRef = useRef<string>(initialQuery);
 
   const activeTabData = tabs.find(tab => tab.id === activeTab);
 
@@ -67,6 +71,13 @@ export function QueryEditor({ session, onQueryExecute, initialQuery = '', availa
     }
   }, [theme]);
 
+  // Update editor content ref when tab changes
+  useEffect(() => {
+    if (activeTabData) {
+      editorContentRef.current = activeTabData.query;
+    }
+  }, [activeTab]);
+
   // Handle initialQuery updates and auto-execute
   useEffect(() => {
     if (initialQuery && initialQuery.trim() && initialQuery !== activeTabData?.query) {
@@ -74,6 +85,8 @@ export function QueryEditor({ session, onQueryExecute, initialQuery = '', availa
       setTabs(prev => prev.map(tab => 
         tab.id === activeTab ? { ...tab, query: initialQuery } : tab
       ));
+      
+      editorContentRef.current = initialQuery;
       
       // Auto-execute the query after a brief delay to ensure the query is set
       if (session) {
@@ -107,24 +120,24 @@ export function QueryEditor({ session, onQueryExecute, initialQuery = '', availa
                 ...prev.slice(0, 49)
               ]);
 
-                             if (onQueryExecute) {
-                 onQueryExecute(initialQuery, result);
-               }
+              if (onQueryExecute) {
+                onQueryExecute(initialQuery, result);
+              }
 
-               // Add to persistent history for auto-executed queries
-               if (session) {
-                 queryHistoryManager.addQueryToHistory({
-                   type: 'ai-generated',
-                   query: initialQuery,
-                   result,
-                   executionTime: result.executionTime,
-                   connection: {
-                     name: session.name,
-                     type: session.type,
-                     database: session.database,
-                   },
-                 });
-               }
+              // Add to persistent history for auto-executed queries
+              if (session) {
+                queryHistoryManager.addQueryToHistory({
+                  type: 'ai-generated',
+                  query: initialQuery,
+                  result,
+                  executionTime: result.executionTime,
+                  connection: {
+                    name: session.name,
+                    type: session.type,
+                    database: session.database,
+                  },
+                });
+              }
             }
           } catch (error) {
             console.error('Auto-execute failed:', error);
@@ -140,8 +153,23 @@ export function QueryEditor({ session, onQueryExecute, initialQuery = '', availa
     ));
   }, [activeTab]);
 
+  // Simple handler that just tracks content without re-rendering
+  const handleQueryChange = useCallback((value: string) => {
+    editorContentRef.current = value;
+  }, []);
+
+  // Sync editor content to state when needed (on execute, save, etc.)
+  const syncEditorToState = useCallback(() => {
+    setTabs(prev => prev.map(tab => 
+      tab.id === activeTab ? { ...tab, query: editorContentRef.current } : tab
+    ));
+  }, [activeTab]);
+
   const executeQuery = async () => {
-    if (!session || !activeTabData?.query.trim()) return;
+    // Sync editor content to state and get current query
+    syncEditorToState();
+    const currentQuery = editorContentRef.current;
+    if (!session || !currentQuery.trim()) return;
 
     updateActiveTab({ isExecuting: true, result: undefined });
 
@@ -153,7 +181,7 @@ export function QueryEditor({ session, onQueryExecute, initialQuery = '', availa
           'Authorization': `Bearer ${session.sessionId}`
         },
         body: JSON.stringify({
-          query: activeTabData.query,
+          query: currentQuery,
         }),
       });
 
@@ -165,7 +193,7 @@ export function QueryEditor({ session, onQueryExecute, initialQuery = '', availa
         // Add to history
         setQueryHistory(prev => [
           {
-            query: activeTabData.query,
+            query: currentQuery,
             timestamp: new Date(),
             executionTime: result.executionTime,
           },
@@ -176,7 +204,7 @@ export function QueryEditor({ session, onQueryExecute, initialQuery = '', availa
         if (session) {
           queryHistoryManager.addQueryToHistory({
             type: 'sql',
-            query: activeTabData.query,
+            query: currentQuery,
             result,
             executionTime: result.executionTime,
             connection: {
@@ -188,7 +216,7 @@ export function QueryEditor({ session, onQueryExecute, initialQuery = '', availa
         }
 
         if (onQueryExecute) {
-          onQueryExecute(activeTabData.query, result);
+          onQueryExecute(currentQuery, result);
         }
       } else {
         updateActiveTab({ 
@@ -237,13 +265,15 @@ export function QueryEditor({ session, onQueryExecute, initialQuery = '', availa
   };
 
   const saveQuery = () => {
-    if (!activeTabData?.query.trim()) return;
+    syncEditorToState();
+    const currentQuery = editorContentRef.current;
+    if (!currentQuery.trim()) return;
     
-    const blob = new Blob([activeTabData.query], { type: 'text/sql' });
+    const blob = new Blob([currentQuery], { type: 'text/sql' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${activeTabData.title.toLowerCase().replace(/\s+/g, '_')}.sql`;
+    a.download = `query_${activeTab}.sql`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -314,6 +344,7 @@ export function QueryEditor({ session, onQueryExecute, initialQuery = '', availa
                 <div className="space-y-4 w-full">
                   <div className="border rounded-lg overflow-hidden w-full">
                     <CodeMirror
+                      key={`${tab.id}-${isDarkTheme}`}
                       value={tab.query}
                       height="300px"
                       extensions={[
@@ -328,11 +359,7 @@ export function QueryEditor({ session, onQueryExecute, initialQuery = '', availa
                         })
                       ]}
                       theme={isDarkTheme ? oneDark : undefined}
-                      onChange={(value) => {
-                        setTabs(prev => prev.map(t => 
-                          t.id === tab.id ? { ...t, query: value } : t
-                        ));
-                      }}
+                      onChange={handleQueryChange}
                       placeholder="Enter your SQL query here..."
                       style={{ maxWidth: '100%' }}
                     />
@@ -365,12 +392,14 @@ export function QueryEditor({ session, onQueryExecute, initialQuery = '', availa
                                                  ) : tab.result.rows.length > 0 ? (
                            <div className="w-full overflow-x-auto border rounded-lg">
                              <div className="max-h-96 overflow-y-auto">
-                               <table className="w-full text-sm">
+                               <table className="w-full text-sm table-fixed">
                                  <thead className="sticky top-0 bg-muted/50 backdrop-blur">
                                    <tr>
                                      {tab.result.columns.map((column, index) => (
-                                       <th key={index} className="px-3 py-2 text-left font-medium border-b border-border whitespace-nowrap">
-                                         {column}
+                                       <th key={index} className="px-3 py-2 text-left font-medium border-b border-border whitespace-nowrap w-48 min-w-[120px]">
+                                         <div className="truncate" title={column}>
+                                           {column}
+                                         </div>
                                        </th>
                                      ))}
                                    </tr>
@@ -379,10 +408,10 @@ export function QueryEditor({ session, onQueryExecute, initialQuery = '', availa
                                    {tab.result.rows.map((row, rowIndex) => (
                                      <tr key={rowIndex} className="hover:bg-muted/30 border-b border-border/50">
                                        {tab.result!.columns.map((column, colIndex) => (
-                                         <td key={colIndex} className="px-3 py-2 border-r border-border/30 last:border-r-0">
-                                           <div className="max-w-xs truncate" title={String(row[column] || '')}>
+                                         <td key={colIndex} className="px-3 py-2 border-r border-border/30 last:border-r-0 w-48 min-w-[120px]">
+                                           <div className="w-full h-6 flex items-center overflow-hidden">
                                              {row[column] !== null && row[column] !== undefined 
-                                               ? String(row[column]) 
+                                               ? <JsonCell value={row[column]} />
                                                : <span className="text-muted-foreground italic">NULL</span>
                                              }
                                            </div>
@@ -425,11 +454,10 @@ export function QueryEditor({ session, onQueryExecute, initialQuery = '', availa
                   key={index}
                   className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-muted/30 rounded cursor-pointer hover:bg-muted/50 gap-2"
                   onClick={() => {
-                    if (activeTabData) {
-                      setTabs(prev => prev.map(tab => 
-                        tab.id === activeTab ? { ...tab, query: item.query } : tab
-                      ));
-                    }
+                    setTabs(prev => prev.map(tab => 
+                      tab.id === activeTab ? { ...tab, query: item.query } : tab
+                    ));
+                    editorContentRef.current = item.query;
                   }}
                 >
                   <div className="flex-1 min-w-0">

@@ -1,11 +1,19 @@
-import { QueryResult, ConnectionConfig } from '@/types/database';
+import { QueryResult } from '@/types/database';
 
 export interface QueryHistoryItem {
   id: string;
   type: 'sql' | 'ai-generated';
   timestamp: Date;
   query: string;
-  result?: QueryResult;
+  // Store only result metadata, not the actual data to prevent localStorage bloat
+  resultMetadata?: {
+    rowCount: number;
+    columnCount: number;
+    columns: string[];
+    executionTime: number;
+    affectedRows?: number;
+    error?: string;
+  };
   executionTime: number;
   connection: {
     name: string;
@@ -35,9 +43,39 @@ class QueryHistoryManager {
   private readonly MAX_HISTORY_ITEMS = 500;
 
   // Query History Methods
-  addQueryToHistory(item: Omit<QueryHistoryItem, 'id' | 'timestamp'>): void {
+  addQueryToHistory(item: {
+    type: 'sql' | 'ai-generated';
+    query: string;
+    result?: QueryResult;
+    executionTime: number;
+    connection: {
+      name: string;
+      type: string;
+      database: string;
+    };
+    aiPrompt?: string;
+    selectedTables?: string[];
+    aiModel?: string;
+  }): void {
+    // Create metadata from result instead of storing full result
+    const resultMetadata = item.result ? {
+      rowCount: item.result.rows?.length || 0,
+      columnCount: item.result.columns?.length || 0,
+      columns: item.result.columns || [],
+      executionTime: item.result.executionTime || item.executionTime,
+      affectedRows: item.result.affectedRows,
+      error: (item.result as any).error
+    } : undefined;
+
     const historyItem: QueryHistoryItem = {
-      ...item,
+      type: item.type,
+      query: item.query,
+      resultMetadata,
+      executionTime: item.executionTime,
+      connection: item.connection,
+      aiPrompt: item.aiPrompt,
+      selectedTables: item.selectedTables,
+      aiModel: item.aiModel,
       id: this.generateId(),
       timestamp: new Date(),
     };
@@ -63,8 +101,8 @@ class QueryHistoryManager {
       return parsed.map((item: any) => ({
         ...item,
         timestamp: new Date(item.timestamp),
-        result: item.result ? {
-          ...item.result,
+        resultMetadata: item.resultMetadata ? {
+          ...item.resultMetadata,
           // Ensure result data is properly typed
         } : undefined,
       }));
@@ -193,6 +231,18 @@ class QueryHistoryManager {
       localStorage.setItem(this.QUERY_HISTORY_KEY, JSON.stringify(history));
     } catch (error) {
       console.error('Failed to save query history:', error);
+      // If quota exceeded, try to recover by keeping only recent items
+      if (error instanceof Error && error.name === 'QuotaExceededError') {
+        console.log('Quota exceeded, reducing history size...');
+        const reducedHistory = history.slice(0, 100); // Keep only 100 most recent
+        try {
+          localStorage.setItem(this.QUERY_HISTORY_KEY, JSON.stringify(reducedHistory));
+          console.log('Successfully saved reduced history');
+        } catch (secondError) {
+          console.error('Still failed after reducing history, clearing all history:', secondError);
+          this.clearQueryHistory();
+        }
+      }
     }
   }
 
@@ -201,6 +251,18 @@ class QueryHistoryManager {
       localStorage.setItem(this.AI_HISTORY_KEY, JSON.stringify(history));
     } catch (error) {
       console.error('Failed to save AI history:', error);
+      // If quota exceeded, try to recover by keeping only recent items
+      if (error instanceof Error && error.name === 'QuotaExceededError') {
+        console.log('AI History quota exceeded, reducing history size...');
+        const reducedHistory = history.slice(0, 100); // Keep only 100 most recent
+        try {
+          localStorage.setItem(this.AI_HISTORY_KEY, JSON.stringify(reducedHistory));
+          console.log('Successfully saved reduced AI history');
+        } catch (secondError) {
+          console.error('Still failed after reducing AI history, clearing all AI history:', secondError);
+          this.clearAIHistory();
+        }
+      }
     }
   }
 

@@ -1,41 +1,68 @@
 'use client';
 
-import { useState } from 'react';
-import { ConnectionConfig, TableSchema, DatabaseType } from '@/types/database';
+import { useState, useEffect } from 'react';
+import { TableSchema } from '@/types/database';
 import { queryHistoryManager } from '@/lib/query-history';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Wand2, Copy, RefreshCw, Brain, Table as TableIcon } from 'lucide-react';
 
 interface LLMQueryGeneratorProps {
-  connection?: ConnectionConfig;
   availableTables: string[];
   tableSchemas: Record<string, TableSchema>;
   onQueryGenerated: (query: string) => void;
   onUseQuery?: (query: string) => void;
+  sessionId?: string;
+  databaseType?: string;
+  connectionName?: string;
 }
 
 export function LLMQueryGenerator({ 
-  connection, 
   availableTables, 
   tableSchemas, 
   onQueryGenerated,
-  onUseQuery
+  onUseQuery,
+  sessionId,
+  databaseType,
+  connectionName
 }: LLMQueryGeneratorProps) {
-  const [description, setDescription] = useState('');
-  const [selectedTables, setSelectedTables] = useState<string[]>([]);
+  // Persistent state keys
+  const stateKey = sessionId ? `llm-state-${sessionId}` : 'llm-state-default';
+  
+  // Load persisted state
+  const loadPersistedState = () => {
+    if (typeof window === 'undefined') return { description: '', selectedTables: [] };
+    
+    try {
+      const saved = localStorage.getItem(stateKey);
+      return saved ? JSON.parse(saved) : { description: '', selectedTables: [] };
+    } catch {
+      return { description: '', selectedTables: [] };
+    }
+  };
+
+  const [description, setDescription] = useState(() => loadPersistedState().description);
+  const [selectedTables, setSelectedTables] = useState<string[]>(() => loadPersistedState().selectedTables);
   const [generatedQuery, setGeneratedQuery] = useState('');
   const [explanation, setExplanation] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
 
+  // Persist state when it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const state = { description, selectedTables };
+      localStorage.setItem(stateKey, JSON.stringify(state));
+    }
+  }, [description, selectedTables, stateKey]);
+
   const generateQuery = async () => {
-    if (!description.trim() || !connection) return;
+    if (!description.trim() || !sessionId) return;
 
     setIsGenerating(true);
     setError('');
@@ -57,7 +84,7 @@ export function LLMQueryGenerator({
         body: JSON.stringify({
           description,
           schema: relevantSchemas,
-          databaseType: connection.type,
+          databaseType: databaseType || 'mysql',
         }),
       });
 
@@ -68,13 +95,13 @@ export function LLMQueryGenerator({
         setExplanation(result.explanation);
 
         // Add to AI history
-        if (connection) {
+        if (sessionId && databaseType && connectionName) {
           queryHistoryManager.addAIPromptToHistory({
             prompt: description,
             selectedTables: selectedTables.length > 0 ? selectedTables : availableTables,
             generatedQuery: result.query,
-            databaseType: connection.type,
-            connectionName: connection.name,
+            databaseType: databaseType,
+            connectionName: connectionName,
             model: 'gemini-2.0-flash-lite',
           });
         }
@@ -129,8 +156,8 @@ export function LLMQueryGenerator({
         <CardTitle className="flex items-center space-x-2">
           <Brain className="w-5 h-5" />
           <span>AI Query Generator</span>
-          {connection && (
-            <Badge variant="outline">{connection.type}</Badge>
+          {databaseType && (
+            <Badge variant="outline">{databaseType}</Badge>
           )}
         </CardTitle>
       </CardHeader>
@@ -230,7 +257,7 @@ export function LLMQueryGenerator({
         {/* Generate Button */}
         <Button 
           onClick={generateQuery}
-          disabled={!description.trim() || !connection || isGenerating}
+          disabled={!description.trim() || !sessionId || isGenerating}
           className="w-full"
         >
           <Wand2 className="w-4 h-4 mr-2" />

@@ -311,6 +311,9 @@ export default function Dashboard() {
                     tableSchemas={tableSchemas}
                     onQueryGenerated={handleQueryGenerated}
                     onUseQuery={handleUseQuery}
+                    sessionId={selectedSession?.sessionId}
+                    databaseType={selectedSession?.type}
+                    connectionName={selectedSession?.name}
                   />
                 )}
               </TabsContent>
