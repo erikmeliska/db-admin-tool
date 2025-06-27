@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ConnectionSession, QueryResult, TableSchema } from '@/types/database';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +12,16 @@ import { QueryEditor } from '@/components/QueryEditor';
 import { LLMQueryGenerator } from '@/components/LLMQueryGenerator';
 import { QueryHistory } from '@/components/QueryHistory';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { Database, Settings, Code, Brain, History, ChevronRight, Menu, ChevronLeft } from 'lucide-react';
+import { Database, Settings, Code, Brain, History, Menu, ChevronLeft } from 'lucide-react';
+
+// Query tab persistence types
+interface QueryTab {
+  id: string;
+  title: string;
+  query: string;
+  result?: QueryResult;
+  isExecuting?: boolean;
+}
 
 export default function Dashboard() {
   const [selectedSession, setSelectedSession] = useState<ConnectionSession | null>(null);
@@ -24,14 +33,159 @@ export default function Dashboard() {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
   const [sidebarTab, setSidebarTab] = useState('connections');
 
+  // AI Generator prefilled data
+  const [aiPrefilledData, setAiPrefilledData] = useState<{ prompt?: string; tables?: string[] }>({});
+
+  // Persistent query tabs state
+  const [queryTabs, setQueryTabs] = useState<Record<string, { tabs: QueryTab[], activeTab: string }>>({});
+  const loadedSessionsRef = useRef<Set<string>>(new Set());
+
+  // Helper functions for tab persistence
+  const getTabStorageKey = (sessionId: string) => `query-tabs-${sessionId}`;
+  const getActiveTabStorageKey = (sessionId: string) => `active-tab-${sessionId}`;
+  
+  // localStorage management utilities
+  const getStorageSize = () => {
+    let total = 0;
+    for (const key in localStorage) {
+      if (localStorage.hasOwnProperty(key)) {
+        total += localStorage[key].length + key.length;
+      }
+    }
+    return total;
+  };
+
+  const cleanupOldTabData = (currentSessionId?: string) => {
+    const keysToRemove: string[] = [];
+    const queryTabPrefix = 'query-tabs-';
+    const activeTabPrefix = 'active-tab-';
+    const llmStatePrefix = 'llm-state-';
+    
+    // Find old session data (keep only last 5 sessions + current)
+    const sessionIds = new Set<string>();
+    
+    for (const key in localStorage) {
+      if (key.startsWith(queryTabPrefix)) {
+        const sessionId = key.replace(queryTabPrefix, '');
+        sessionIds.add(sessionId);
+      }
+    }
+    
+    const sessionIdArray = Array.from(sessionIds);
+    const sessionsToKeep = 5;
+    
+    if (sessionIdArray.length > sessionsToKeep) {
+      const sessionsToRemove = sessionIdArray
+        .filter(id => id !== currentSessionId)
+        .slice(0, -sessionsToKeep + 1);
+      
+      sessionsToRemove.forEach(sessionId => {
+        keysToRemove.push(`${queryTabPrefix}${sessionId}`);
+        keysToRemove.push(`${activeTabPrefix}${sessionId}`);
+        keysToRemove.push(`${llmStatePrefix}${sessionId}`);
+      });
+    }
+    
+    // Remove keys
+    keysToRemove.forEach(key => {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        console.warn('Failed to remove localStorage key:', key);
+      }
+    });
+    
+    return keysToRemove.length;
+  };
+
+  const safeSaveToStorage = (key: string, value: string, currentSessionId?: string): boolean => {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch {
+      console.warn('localStorage quota exceeded, attempting cleanup...');
+      
+      // Try cleanup and retry
+      const removedItems = cleanupOldTabData(currentSessionId);
+      console.log(`Cleaned up ${removedItems} old localStorage items`);
+      
+      try {
+        localStorage.setItem(key, value);
+        return true;
+      } catch (retryError) {
+        console.error('Failed to save to localStorage even after cleanup:', retryError);
+        
+        // Show user-friendly error
+        const storageSize = (getStorageSize() / 1024).toFixed(1);
+        console.error(`localStorage usage: ${storageSize}KB. Consider clearing browser data for localhost.`);
+        
+        return false;
+      }
+    }
+  };
+
+  const loadPersistedTabs = useCallback((sessionId: string): { tabs: QueryTab[], activeTab: string } => {
+    try {
+      const storedTabs = localStorage.getItem(getTabStorageKey(sessionId));
+      const storedActiveTab = localStorage.getItem(getActiveTabStorageKey(sessionId));
+      
+      if (storedTabs) {
+        const parsedTabs = JSON.parse(storedTabs);
+        return {
+          tabs: parsedTabs,
+          activeTab: storedActiveTab || parsedTabs[0]?.id || '1'
+        };
+      }
+    } catch (error) {
+      console.error('Failed to load persisted tabs:', error);
+    }
+    
+    // Return default if no persisted tabs or error
+    return {
+      tabs: [{ id: '1', title: 'Query 1', query: '' }],
+      activeTab: '1'
+    };
+  }, []); // No dependencies - this function is pure
+
+  const saveTabsToStorage = useCallback((sessionId: string, tabs: QueryTab[], activeTab: string) => {
+    // Serialize tabs but limit the size by truncating large results
+    const sanitizedTabs = tabs.map(tab => ({
+      ...tab,
+      result: tab.result ? {
+        ...tab.result,
+        // Limit result data to prevent localStorage bloat
+        rows: tab.result.rows?.slice(0, 100) || [], // Keep only first 100 rows
+        executionTime: tab.result.executionTime,
+        affectedRows: tab.result.affectedRows
+      } : undefined
+    }));
+
+    const tabsSuccess = safeSaveToStorage(getTabStorageKey(sessionId), JSON.stringify(sanitizedTabs), sessionId);
+    const activeTabSuccess = safeSaveToStorage(getActiveTabStorageKey(sessionId), activeTab, sessionId);
+    
+    if (!tabsSuccess || !activeTabSuccess) {
+      console.warn('Some tab data could not be saved to localStorage due to quota limits');
+    }
+  }, []); // No dependencies - this function is pure
+
   useEffect(() => {
     if (selectedSession) {
       loadTables();
+      
+      // Load persisted tabs for this session only if not already loaded
+      if (!loadedSessionsRef.current.has(selectedSession.sessionId)) {
+        const sessionTabData = loadPersistedTabs(selectedSession.sessionId);
+        setQueryTabs(prev => ({
+          ...prev,
+          [selectedSession.sessionId]: sessionTabData
+        }));
+        loadedSessionsRef.current.add(selectedSession.sessionId);
+      }
     } else {
       setAvailableTables([]);
       setTableSchemas({});
     }
-  }, [selectedSession]);
+  }, [selectedSession, loadPersistedTabs]);
 
   const loadTables = async () => {
     if (!selectedSession) return;
@@ -113,14 +267,19 @@ export default function Dashboard() {
     setIsSidebarExpanded(false);
   };
 
-  const handleQueryGenerated = (query: string) => {
-    setQueryToExecute(query);
+
+
+  const handleAIPromptSelect = (prompt: string, tables: string[]) => {
+    setAiPrefilledData({ prompt, tables });
+    setActiveTab('ai');
   };
 
-  const handleUseQuery = (query: string) => {
-    setQueryToExecute(query);
-    setActiveTab('query');
-  };
+  // Clear prefilled data when switching away from AI tab
+  useEffect(() => {
+    if (activeTab !== 'ai') {
+      setAiPrefilledData({});
+    }
+  }, [activeTab]);
 
   const handleQueryExecuted = (query: string, result: QueryResult) => {
     console.log('Query executed:', query, result);
@@ -131,6 +290,26 @@ export default function Dashboard() {
     if (tab === 'explorer' && !isSidebarExpanded) {
       setIsSidebarExpanded(true);
     }
+  };
+
+  // Handle query tab updates
+  const handleQueryTabsUpdate = (tabs: QueryTab[], activeTab: string) => {
+    if (!selectedSession) return;
+    
+    const sessionId = selectedSession.sessionId;
+    setQueryTabs(prev => ({
+      ...prev,
+      [sessionId]: { tabs, activeTab }
+    }));
+    
+    // Save to localStorage
+    saveTabsToStorage(sessionId, tabs, activeTab);
+  };
+
+  // Get current session's tab data
+  const getCurrentTabData = () => {
+    if (!selectedSession) return { tabs: [{ id: '1', title: 'Query 1', query: '' }], activeTab: '1' };
+    return queryTabs[selectedSession.sessionId] || { tabs: [{ id: '1', title: 'Query 1', query: '' }], activeTab: '1' };
   };
 
   return (
@@ -156,6 +335,20 @@ export default function Dashboard() {
                 <Badge variant="secondary">{selectedSession.type}</Badge>
               </div>
             )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                const removedItems = cleanupOldTabData();
+                const storageSize = (getStorageSize() / 1024).toFixed(1);
+                console.log(`Cleaned up ${removedItems} items. Current storage: ${storageSize}KB`);
+                alert(`Cleaned up ${removedItems} old sessions. Current storage: ${storageSize}KB`);
+              }}
+              title="Clean up old session data"
+              className="text-xs"
+            >
+              🧹
+            </Button>
             <ThemeToggle />
           </div>
         </div>
@@ -294,6 +487,8 @@ export default function Dashboard() {
                   initialQuery={queryToExecute}
                   availableTables={availableTables}
                   tableSchemas={tableSchemas}
+                  persistentTabs={getCurrentTabData()}
+                  onTabsUpdate={handleQueryTabsUpdate}
                 />
               </TabsContent>
               
@@ -309,11 +504,28 @@ export default function Dashboard() {
                   <LLMQueryGenerator 
                     availableTables={availableTables}
                     tableSchemas={tableSchemas}
-                    onQueryGenerated={handleQueryGenerated}
-                    onUseQuery={handleUseQuery}
+                    onQueryRun={(query) => {
+                      setQueryToExecute(query);
+                      setActiveTab('query');
+                    }}
+                    onQueryRunNewTab={(query) => {
+                      // Create new tab with the AI generated query
+                      const newTabId = `tab-${Date.now()}`;
+                      const currentData = getCurrentTabData();
+                      const newTab: QueryTab = {
+                        id: newTabId,
+                        title: `AI Query ${currentData.tabs.length + 1}`,
+                        query: query
+                      };
+                      const updatedTabs = [...currentData.tabs, newTab];
+                      handleQueryTabsUpdate(updatedTabs, newTabId);
+                      setActiveTab('query');
+                    }}
                     sessionId={selectedSession?.sessionId}
                     databaseType={selectedSession?.type}
                     connectionName={selectedSession?.name}
+                    prefilledPrompt={aiPrefilledData.prompt}
+                    prefilledTables={aiPrefilledData.tables}
                   />
                 )}
               </TabsContent>
@@ -324,10 +536,36 @@ export default function Dashboard() {
                     setQueryToExecute(query);
                     setActiveTab('query');
                   }}
-                  onAIPromptSelect={(_prompt, _tables) => {
-                    // Switch to AI tab and pre-fill the prompt
-                    setActiveTab('ai');
-                    // Note: We'd need to expose methods to set prompt and tables in LLMQueryGenerator
+                  onQuerySelectNewTab={(query) => {
+                    // Create new tab with the query
+                    const newTabId = `tab-${Date.now()}`;
+                    const currentData = getCurrentTabData();
+                    const newTab: QueryTab = {
+                      id: newTabId,
+                      title: `Query ${currentData.tabs.length + 1}`,
+                      query: query
+                    };
+                    const updatedTabs = [...currentData.tabs, newTab];
+                    handleQueryTabsUpdate(updatedTabs, newTabId);
+                    setActiveTab('query');
+                  }}
+                  onAIPromptSelect={handleAIPromptSelect}
+                  onAIQueryRun={(query) => {
+                    setQueryToExecute(query);
+                    setActiveTab('query');
+                  }}
+                  onAIQueryRunNewTab={(query) => {
+                    // Create new tab with the AI generated query
+                    const newTabId = `tab-${Date.now()}`;
+                    const currentData = getCurrentTabData();
+                    const newTab: QueryTab = {
+                      id: newTabId,
+                      title: `AI Query ${currentData.tabs.length + 1}`,
+                      query: query
+                    };
+                    const updatedTabs = [...currentData.tabs, newTab];
+                    handleQueryTabsUpdate(updatedTabs, newTabId);
+                    setActiveTab('query');
                   }}
                   currentConnection={selectedSession?.name}
                 />

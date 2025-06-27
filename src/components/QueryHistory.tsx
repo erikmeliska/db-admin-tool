@@ -16,16 +16,27 @@ import {
   Database, 
   Clock, 
   Filter,
-  TrendingUp
+  TrendingUp,
+  ExternalLink
 } from 'lucide-react';
 
 interface QueryHistoryProps {
   onQuerySelect?: (query: string) => void;
+  onQuerySelectNewTab?: (query: string) => void;
   onAIPromptSelect?: (prompt: string, tables: string[]) => void;
+  onAIQueryRun?: (query: string) => void;
+  onAIQueryRunNewTab?: (query: string) => void;
   currentConnection?: string;
 }
 
-export function QueryHistory({ onQuerySelect, onAIPromptSelect, currentConnection }: QueryHistoryProps) {
+export function QueryHistory({ 
+  onQuerySelect, 
+  onQuerySelectNewTab, 
+  onAIPromptSelect, 
+  onAIQueryRun, 
+  onAIQueryRunNewTab, 
+  currentConnection 
+}: QueryHistoryProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterConnection, setFilterConnection] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('all');
@@ -256,25 +267,63 @@ export function QueryHistory({ onQuerySelect, onAIPromptSelect, currentConnectio
                       </div>
 
                       <div className="flex gap-1">
-                        {isQueryItem(item) && onQuerySelect && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => onQuerySelect(item.query)}
-                            title="Use this query"
-                          >
-                            <Play className="w-3 h-3" />
-                          </Button>
+                        {isQueryItem(item) && (
+                          <>
+                            {onQuerySelect && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => onQuerySelect(item.query)}
+                                title="Use this query"
+                              >
+                                <Play className="w-3 h-3" />
+                              </Button>
+                            )}
+                            {onQuerySelectNewTab && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => onQuerySelectNewTab(item.query)}
+                                title="Use this query in new tab"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                              </Button>
+                            )}
+                          </>
                         )}
-                        {isAIItem(item) && onAIPromptSelect && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => onAIPromptSelect(item.prompt, item.selectedTables)}
-                            title="Use this prompt"
-                          >
-                            <Brain className="w-3 h-3" />
-                          </Button>
+                        {isAIItem(item) && (
+                          <>
+                            {onAIPromptSelect && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => onAIPromptSelect(item.prompt, item.selectedTables)}
+                                title="Use this prompt"
+                              >
+                                <Brain className="w-3 h-3" />
+                              </Button>
+                            )}
+                            {onAIQueryRun && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => onAIQueryRun(item.generatedQuery)}
+                                title="Run query"
+                              >
+                                <Play className="w-3 h-3" />
+                              </Button>
+                            )}
+                            {onAIQueryRunNewTab && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => onAIQueryRunNewTab(item.generatedQuery)}
+                                title="Run query in new tab"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                              </Button>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>

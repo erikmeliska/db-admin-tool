@@ -16,6 +16,7 @@ A modern, AI-powered database administration tool built with Next.js, featuring 
 - **Server-side credential storage** - Credentials never transmitted after session creation
 - **Automatic session expiration** - 24-hour security timeout
 - **Session revocation** - Immediate access termination capability
+- **Encrypted session persistence** - AES-encrypted file storage for session recovery
 - **Docker security** - Non-root user, minimal attack surface
 
 ### 🗄️ **Multi-Database Support**
@@ -23,48 +24,61 @@ A modern, AI-powered database administration tool built with Next.js, featuring 
 - **PostgreSQL** - Full-featured support
 - **SQLite** - Local database files
 - **MySQL Proxy** - Custom API proxy integration
+- **Case-sensitive table names** - Proper quoting for all database types
 
 ### 🤖 **AI-Powered Query Generation**
 - **Gemini 2.0 Flash Lite** integration
 - Natural language to SQL conversion
 - Schema-aware query generation
 - Context-sensitive table and column suggestions
+- **Smart table selection** - Choose specific tables or use all
+- **Query execution buttons** - Run queries directly or in new tabs
+- **Reset functionality** - Clear forms with one click
 - Anti-hallucination prompting
 
 ### 📝 **Advanced SQL Editor**
 - **CodeMirror** with SQL syntax highlighting
 - **Smart autocomplete** with table/column suggestions
-- **Multi-tab** query editing
+- **Multi-tab** query editing with persistent state
 - **Query history** with search and filtering
 - **Auto-execution** from AI-generated queries
 - **Performance optimized** - No cursor jumping or typing delays
 - **Responsive editing** - Handles large queries without lag
+- **Infinite loop prevention** - Robust state management
 
 ### 📊 **Comprehensive History System**
-- **Query History** - Track all SQL executions with metadata
-- **AI Prompt History** - Save prompts with context and generated queries
+- **Dual History Types** - Separate SQL queries and AI prompts
+- **Advanced Action Buttons**:
+  - **SQL History**: "Use Query" and "Use in New Tab" buttons
+  - **AI History**: "Use Prompt", "Run Query", and "Run in New Tab" buttons
 - **Search & Filter** - Find past queries and prompts easily
 - **Statistics Dashboard** - Usage analytics and metrics
-- **Optimized Storage** - Efficient localStorage usage (99% reduction)
-- **Automatic Recovery** - Graceful handling of storage quota limits
+- **Smart Storage Management** - Automatic cleanup of old sessions
+- **Storage Optimization** - 99% reduction in localStorage usage
+- **Quota Management** - Automatic recovery from storage limits
 - **Persistent Sessions** - History survives browser sessions
 
 ### 🎨 **Modern UI/UX**
 - **Dark/Light/System** theme support
 - **Responsive design** for all devices
+- **Collapsible sidebar** - Smart space management (48px ↔ 500px)
+- **Auto-collapse** on table selection for better workflow
 - **Real-time** query execution and results
 - **Schema explorer** with expandable table structures
-- **Secure connection management** with session-based authentication
 - **Interactive JSON display** - Smart visualization of JSON/JSONB fields
-- **Collapsible sidebar** - Efficient space utilization
+- **Manual cleanup utility** - 🧹 button for storage management
 
 ### ⚡ **Performance & Optimization**
 - **Optimized Query Editor** - No cursor jumping or typing delays
 - **Efficient State Management** - CodeMirror manages its own state
-- **Smart Storage** - 99% reduction in localStorage usage
-- **Automatic Recovery** - Graceful handling of storage quota limits
+- **Smart Storage Management**:
+  - Automatic cleanup of old session data (keeps only 5 recent sessions)
+  - Truncated result storage (first 100 rows only)
+  - Manual cleanup utility with real-time feedback
+  - Graceful fallback when localStorage quota exceeded
+- **Memory Efficient** - Stores only essential metadata
 - **Responsive UI** - Smooth interactions even with large datasets
-- **Memory Efficient** - Stores only metadata instead of full query results
+- **Tab Persistence** - Individual session tab management
 
 ## 🚀 Quick Start
 
@@ -122,8 +136,6 @@ docker run -d -p 8008:8008 -e GOOGLE_API_KEY=your_key db-admin-tool
 - Security: Non-root user execution
 - Port: 8008
 
-See [`.cursor/docker.md`](.cursor/docker.md) for detailed deployment instructions.
-
 ## 🔧 Configuration
 
 ### Environment Variables
@@ -140,6 +152,7 @@ The tool uses a **session-based security model**:
 2. **Use Session**: All subsequent operations use session tokens
 3. **Automatic Expiry**: Sessions expire after 24 hours
 4. **Manual Revocation**: Sessions can be terminated immediately
+5. **Persistent Recovery**: Sessions survive server restarts
 
 #### Connection Types
 
@@ -181,36 +194,53 @@ The tool uses a **session-based security model**:
 ## 📚 Usage Guide
 
 ### 1. **Secure Session Management**
-- Navigate to the **Secure Database Sessions** section
+- Navigate to the **Connections** tab in the sidebar
 - Click **"New Session"** to create a secure connection
-- Enter credentials once - they're stored securely on the server
+- Enter credentials once - they're stored securely on the server with AES encryption
 - Session tokens are used for all subsequent operations
 - Sessions auto-expire after 24 hours or can be manually revoked
+- Sessions persist across server restarts
 
-### 2. **Query Execution**
-- Use the **Query Editor** tab to write SQL
-- Enjoy autocomplete suggestions for tables and columns
-- Execute queries with **Ctrl+Enter** or the Execute button
-- View results in an interactive table
-
-### 3. **AI Query Generation**
-- Switch to the **AI Generator** tab
-- Describe what you want to query in natural language
-- Select specific tables to include (optional)
-- Click **"Generate SQL Query"**
-- Use the generated query directly or modify as needed
-
-### 4. **History Management**
-- Access the **History** tab to view all past activity
-- Search through queries and AI prompts
-- Filter by connection or date
-- Reuse any previous query or prompt with one click
-
-### 5. **Schema Exploration**
-- Use the **Explorer** tab in the sidebar
+### 2. **Database Exploration**
+- Use the **Explorer** tab in the collapsible sidebar
 - Browse database tables and their structures
 - View column details, types, and constraints
 - Click any table to generate a basic SELECT query
+- Sidebar auto-collapses for better workspace
+
+### 3. **Query Execution**
+- Use the **Query Editor** tab to write SQL
+- Enjoy autocomplete suggestions for tables and columns
+- Execute queries with **Ctrl+Enter** or the Execute button
+- Multi-tab support with persistent state per session
+- View results in an interactive table with JSON field support
+
+### 4. **AI Query Generation**
+- Switch to the **AI Generator** tab
+- Describe what you want to query in natural language
+- Select specific tables to include (optional - leave empty for all tables)
+- Use **"Select All"** / **"Unselect All"** toggle for convenience
+- Click **"Generate SQL Query"**
+- Use action buttons:
+  - **▶️ Run Query** - Execute in current tab
+  - **🔗 Run in New Tab** - Create new tab and execute
+- **🔄 Reset** button to clear form and start fresh
+
+### 5. **History Management**
+- Access the **History** tab to view all past activity
+- **Three history types**: All History, SQL Queries, AI Prompts
+- **Advanced action buttons**:
+  - **SQL Queries**: ▶️ Use Query, 🔗 Use in New Tab
+  - **AI Prompts**: 🧠 Use Prompt, ▶️ Run Query, 🔗 Run in New Tab
+- Search through queries and prompts with real-time filtering
+- Filter by connection or date
+- Statistics dashboard showing usage metrics
+
+### 6. **Storage Management**
+- **Automatic cleanup** of old session data (keeps 5 recent sessions)
+- **Manual cleanup** with 🧹 button in header
+- **Storage optimization** prevents localStorage quota issues
+- **Graceful fallback** when storage limits reached
 
 ## 🔒 Security
 
@@ -219,20 +249,32 @@ This application implements **enterprise-grade security**:
 - ✅ **Session-based authentication** - No credentials in API requests
 - ✅ **Authorization headers** - Bearer token authentication
 - ✅ **Server-side credential storage** - Credentials never transmitted after initial session
+- ✅ **AES encryption** - Session data encrypted at rest
 - ✅ **Automatic session expiration** - 24-hour timeout
 - ✅ **Manual session revocation** - Immediate access termination
+- ✅ **Session persistence** - Survives server restarts securely
 - ✅ **Docker security** - Non-root user execution
 - ✅ **Minimal attack surface** - Optimized for security
 
-**Previous vulnerabilities (now fixed):**
-- ❌ Database passwords in every HTTP request
-- ❌ Credentials in network traffic and logs
-- ❌ Credentials stored in browser memory
-- ❌ No session management or access control
-
-See [`.cursor/security.md`](.cursor/security.md) for detailed security architecture.
-
 ## 🛠️ Development
+
+### Recent Improvements
+
+**v2.1.0 - Enhanced History & Storage Management**
+- ✅ Advanced history action buttons (run query, run in new tab)
+- ✅ Smart localStorage management with automatic cleanup
+- ✅ Storage quota handling and manual cleanup utility
+- ✅ AI query generator reset functionality
+- ✅ Infinite loop prevention in query execution
+- ✅ Improved tab persistence and state management
+
+**v2.0.0 - Security & Performance Overhaul**
+- ✅ Session-based security architecture
+- ✅ Encrypted session persistence
+- ✅ Performance optimized query editor
+- ✅ Collapsible sidebar with auto-collapse
+- ✅ Multi-tab query editing
+- ✅ Case-sensitive table name support
 
 ### Project Structure
 
@@ -245,53 +287,37 @@ src/
 │   │   └── llm/          # AI query generation
 │   ├── globals.css        # Global styles
 │   ├── layout.tsx         # Root layout
-│   └── page.tsx          # Main dashboard
+│   └── page.tsx          # Main dashboard with storage management
 ├── components/            # React components
 │   ├── ui/               # shadcn/ui components
-│   ├── SecureConnectionManager.tsx # Session-based connections
-│   ├── DatabaseExplorer.tsx
-│   ├── LLMQueryGenerator.tsx
-│   ├── QueryEditor.tsx
-│   ├── QueryHistory.tsx
-│   └── ThemeProvider.tsx
-├── lib/                  # Utility libraries
-│   ├── database/         # Database connections
-│   ├── session-manager.ts # Secure session handling
-│   ├── llm/             # AI query generation
-│   ├── query-history.ts  # History management
-│   └── sql-completions.ts # Autocomplete logic
-└── types/               # TypeScript definitions
-    └── database.ts
+│   ├── QueryEditor.tsx   # Multi-tab SQL editor with performance optimizations
+│   ├── QueryHistory.tsx  # Advanced history with action buttons
+│   ├── LLMQueryGenerator.tsx  # AI query generation with reset
+│   ├── DatabaseExplorer.tsx   # Schema exploration
+│   └── SecureConnectionManager.tsx  # Session management
+├── lib/                   # Utilities
+│   ├── session-manager.ts # AES-encrypted session persistence
+│   ├── query-history.ts  # Dual history management
+│   └── database/         # Database connection handlers
+└── sessions/             # Encrypted session storage
 ```
 
-### Key Technologies
-
-- **Next.js 15** - React framework with App Router
-- **TypeScript** - Type safety and developer experience
-- **Tailwind CSS** - Utility-first CSS framework
-- **shadcn/ui** - High-quality React components
-- **CodeMirror** - Advanced SQL editor with performance optimizations
-- **Google AI (Gemini)** - Natural language to SQL
-- **Session Management** - Secure credential handling with persistent storage
-
-## 📄 Documentation
-
-- [Security Architecture](.cursor/security.md) - Detailed security implementation
-- [Docker Deployment](.cursor/docker.md) - Container deployment guide
-- [Development Instructions](.cursor/instructions.md) - Development setup and guidelines
-
-## 🤝 Contributing
+### Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Ensure security best practices
-5. Submit a pull request
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Commit your changes: `git commit -m 'Add amazing feature'`
+4. Push to the branch: `git push origin feature/amazing-feature`
+5. Open a Pull Request
 
-## 📜 License
+## 📄 License
 
-This project is licensed under the MIT License.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
----
+## 🙏 Acknowledgments
 
-**Built with security in mind** 🔒 | **AI-powered** 🤖 | **Developer-friendly** 🛠️
+- **Next.js** team for the amazing React framework
+- **shadcn/ui** for beautiful, accessible UI components
+- **CodeMirror** for the powerful SQL editor
+- **Google AI** for Gemini integration
+- **Tailwind CSS** for utility-first styling

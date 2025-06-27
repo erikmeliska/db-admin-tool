@@ -10,26 +10,30 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Wand2, Copy, RefreshCw, Brain, Table as TableIcon } from 'lucide-react';
+import { Wand2, Copy, RefreshCw, Brain, Table as TableIcon, RotateCcw, Play, ExternalLink } from 'lucide-react';
 
 interface LLMQueryGeneratorProps {
   availableTables: string[];
   tableSchemas: Record<string, TableSchema>;
-  onQueryGenerated: (query: string) => void;
-  onUseQuery?: (query: string) => void;
+  onQueryRun?: (query: string) => void;
+  onQueryRunNewTab?: (query: string) => void;
   sessionId?: string;
   databaseType?: string;
   connectionName?: string;
+  prefilledPrompt?: string;
+  prefilledTables?: string[];
 }
 
 export function LLMQueryGenerator({ 
   availableTables, 
   tableSchemas, 
-  onQueryGenerated,
-  onUseQuery,
+  onQueryRun,
+  onQueryRunNewTab,
   sessionId,
   databaseType,
-  connectionName
+  connectionName,
+  prefilledPrompt,
+  prefilledTables
 }: LLMQueryGeneratorProps) {
   // Persistent state keys
   const stateKey = sessionId ? `llm-state-${sessionId}` : 'llm-state-default';
@@ -46,8 +50,27 @@ export function LLMQueryGenerator({
     }
   };
 
-  const [description, setDescription] = useState(() => loadPersistedState().description);
-  const [selectedTables, setSelectedTables] = useState<string[]>(() => loadPersistedState().selectedTables);
+  const [description, setDescription] = useState(() => {
+    // Use prefilled prompt if provided, otherwise load from storage
+    if (prefilledPrompt) return prefilledPrompt;
+    return loadPersistedState().description;
+  });
+  
+  const [selectedTables, setSelectedTables] = useState<string[]>(() => {
+    // Use prefilled tables if provided (including empty array), otherwise load from storage
+    if (prefilledTables !== undefined) return prefilledTables;
+    return loadPersistedState().selectedTables;
+  });
+
+  // Handle prefilled data updates
+  useEffect(() => {
+    if (prefilledPrompt !== undefined) {
+      setDescription(prefilledPrompt);
+    }
+    if (prefilledTables !== undefined) {
+      setSelectedTables(prefilledTables); // This will be [] when "use all" was originally selected
+    }
+  }, [prefilledPrompt, prefilledTables]);
   const [generatedQuery, setGeneratedQuery] = useState('');
   const [explanation, setExplanation] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -98,7 +121,7 @@ export function LLMQueryGenerator({
         if (sessionId && databaseType && connectionName) {
           queryHistoryManager.addAIPromptToHistory({
             prompt: description,
-            selectedTables: selectedTables.length > 0 ? selectedTables : availableTables,
+            selectedTables: selectedTables, // Save actual selection - empty array means "use all"
             generatedQuery: result.query,
             databaseType: databaseType,
             connectionName: connectionName,
@@ -123,15 +146,7 @@ export function LLMQueryGenerator({
     }
   };
 
-  const insertQuery = () => {
-    if (generatedQuery) {
-      if (onUseQuery) {
-        onUseQuery(generatedQuery);
-      } else {
-        onQueryGenerated(generatedQuery);
-      }
-    }
-  };
+
 
   const toggleTableSelection = (tableName: string) => {
     setSelectedTables(prev => 
@@ -139,6 +154,24 @@ export function LLMQueryGenerator({
         ? prev.filter(t => t !== tableName)
         : [...prev, tableName]
     );
+  };
+
+  const toggleAllTables = () => {
+    if (selectedTables.length === availableTables.length) {
+      // If all are selected, unselect all
+      setSelectedTables([]);
+    } else {
+      // If not all are selected, select all
+      setSelectedTables(availableTables);
+    }
+  };
+
+  const resetForm = () => {
+    setDescription('');
+    setSelectedTables([]);
+    setGeneratedQuery('');
+    setExplanation('');
+    setError('');
   };
 
   const sampleQueries = [
@@ -196,7 +229,17 @@ export function LLMQueryGenerator({
         {/* Table Selection */}
         {availableTables.length > 0 && (
           <div className="space-y-2">
-            <Label>Include Tables (optional - leave empty to include all):</Label>
+            <div className="flex items-center justify-between">
+              <Label>Include Tables (optional - leave empty to include all):</Label>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={toggleAllTables}
+                className="text-xs"
+              >
+                {selectedTables.length === availableTables.length ? 'Unselect All' : 'Select All'}
+              </Button>
+            </div>
             <div className="flex flex-wrap gap-2">
               {availableTables.map(tableName => (
                 <Button
@@ -254,15 +297,25 @@ export function LLMQueryGenerator({
           </Accordion>
         )}
 
-        {/* Generate Button */}
-        <Button 
-          onClick={generateQuery}
-          disabled={!description.trim() || !sessionId || isGenerating}
-          className="w-full"
-        >
-          <Wand2 className="w-4 h-4 mr-2" />
-          {isGenerating ? 'Generating...' : 'Generate SQL Query'}
-        </Button>
+        {/* Generate and Reset Buttons */}
+        <div className="flex space-x-2">
+          <Button 
+            onClick={generateQuery}
+            disabled={!description.trim() || !sessionId || isGenerating}
+            className="flex-1"
+          >
+            <Wand2 className="w-4 h-4 mr-2" />
+            {isGenerating ? 'Generating...' : 'Generate SQL Query'}
+          </Button>
+          <Button 
+            variant="outline"
+            onClick={resetForm}
+            disabled={isGenerating}
+            className="flex-shrink-0"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </Button>
+        </div>
 
         {/* Error Display */}
         {error && (
@@ -294,9 +347,26 @@ export function LLMQueryGenerator({
                   <RefreshCw className="w-4 h-4 mr-1" />
                   Regenerate
                 </Button>
-                <Button size="sm" onClick={insertQuery}>
-                  Use Query
-                </Button>
+                {onQueryRun && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onQueryRun(generatedQuery)}
+                    title="Run query"
+                  >
+                    <Play className="w-3 h-3" />
+                  </Button>
+                )}
+                {onQueryRunNewTab && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onQueryRunNewTab(generatedQuery)}
+                    title="Run query in new tab"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                  </Button>
+                )}
               </div>
             </div>
             
