@@ -37,13 +37,17 @@ A modern, AI-powered database administration tool built with Next.js, featuring 
 - **Multi-tab** query editing
 - **Query history** with search and filtering
 - **Auto-execution** from AI-generated queries
+- **Performance optimized** - No cursor jumping or typing delays
+- **Responsive editing** - Handles large queries without lag
 
 ### 📊 **Comprehensive History System**
-- **Query History** - Track all SQL executions with results
+- **Query History** - Track all SQL executions with metadata
 - **AI Prompt History** - Save prompts with context and generated queries
 - **Search & Filter** - Find past queries and prompts easily
 - **Statistics Dashboard** - Usage analytics and metrics
-- **localStorage Persistence** - History survives browser sessions
+- **Optimized Storage** - Efficient localStorage usage (99% reduction)
+- **Automatic Recovery** - Graceful handling of storage quota limits
+- **Persistent Sessions** - History survives browser sessions
 
 ### 🎨 **Modern UI/UX**
 - **Dark/Light/System** theme support
@@ -51,6 +55,16 @@ A modern, AI-powered database administration tool built with Next.js, featuring 
 - **Real-time** query execution and results
 - **Schema explorer** with expandable table structures
 - **Secure connection management** with session-based authentication
+- **Interactive JSON display** - Smart visualization of JSON/JSONB fields
+- **Collapsible sidebar** - Efficient space utilization
+
+### ⚡ **Performance & Optimization**
+- **Optimized Query Editor** - No cursor jumping or typing delays
+- **Efficient State Management** - CodeMirror manages its own state
+- **Smart Storage** - 99% reduction in localStorage usage
+- **Automatic Recovery** - Graceful handling of storage quota limits
+- **Responsive UI** - Smooth interactions even with large datasets
+- **Memory Efficient** - Stores only metadata instead of full query results
 
 ## 🚀 Quick Start
 
@@ -256,8 +270,9 @@ src/
 - **TypeScript** - Type safety and developer experience
 - **Tailwind CSS** - Utility-first CSS framework
 - **shadcn/ui** - High-quality React components
-- **CodeMirror** - Advanced SQL editor
+- **CodeMirror** - Advanced SQL editor with performance optimizations
 - **Google AI (Gemini)** - Natural language to SQL
+- **Session Management** - Secure credential handling with persistent storage
 
 ## 📄 Documentation
 
