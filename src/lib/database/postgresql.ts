@@ -66,6 +66,7 @@ export class PostgreSQLConnection implements DatabaseConnection {
   }
 
   async getTableSchema(tableName: string): Promise<TableSchema> {
+    // Use double quotes for case-sensitive table names in PostgreSQL
     const columnsResult = await this.executeQuery(`
       SELECT 
         column_name,
@@ -79,13 +80,13 @@ export class PostgreSQLConnection implements DatabaseConnection {
     `);
     
     const columns: ColumnInfo[] = columnsResult.rows.map((row: Record<string, unknown>) => ({
-      name: row.column_name,
+      name: row.column_name as string,
       type: row.character_maximum_length 
         ? `${row.data_type}(${row.character_maximum_length})`
-        : row.data_type,
+        : row.data_type as string,
       nullable: row.is_nullable === 'YES',
       default: row.column_default,
-      autoIncrement: row.column_default?.includes('nextval') || false,
+      autoIncrement: (row.column_default as string)?.includes('nextval') || false,
     }));
 
     return {

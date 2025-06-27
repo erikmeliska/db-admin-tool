@@ -12,6 +12,7 @@ import { sql } from '@codemirror/lang-sql';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { autocompletion } from '@codemirror/autocomplete';
 import { createSQLCompletion } from '@/lib/sql-completions';
+import { useTheme } from '@/components/ThemeProvider';
 import { Play, Save, History, Clock, Database } from 'lucide-react';
 
 interface QueryTab {
@@ -31,6 +32,7 @@ interface QueryEditorProps {
 }
 
 export function QueryEditor({ session, onQueryExecute, initialQuery = '', availableTables = [], tableSchemas = {} }: QueryEditorProps) {
+  const { theme } = useTheme();
   const [tabs, setTabs] = useState<QueryTab[]>([
     { id: '1', title: 'Query 1', query: initialQuery }
   ]);
@@ -38,6 +40,32 @@ export function QueryEditor({ session, onQueryExecute, initialQuery = '', availa
   const [queryHistory, setQueryHistory] = useState<Array<{ query: string; timestamp: Date; executionTime: number }>>([]);
 
   const activeTabData = tabs.find(tab => tab.id === activeTab);
+
+  // Determine if we should use dark theme for CodeMirror
+  const [isDarkTheme, setIsDarkTheme] = useState(false);
+
+  useEffect(() => {
+    const updateTheme = () => {
+      if (theme === 'dark') {
+        setIsDarkTheme(true);
+      } else if (theme === 'light') {
+        setIsDarkTheme(false);
+      } else {
+        // For system theme, check the actual applied theme
+        setIsDarkTheme(document.documentElement.classList.contains('dark'));
+      }
+    };
+
+    updateTheme();
+
+    // Listen for system theme changes when using system theme
+    if (theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handleChange = () => updateTheme();
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
+  }, [theme]);
 
   // Handle initialQuery updates and auto-execute
   useEffect(() => {
@@ -299,7 +327,7 @@ export function QueryEditor({ session, onQueryExecute, initialQuery = '', availa
                           ]
                         })
                       ]}
-                      theme={oneDark}
+                      theme={isDarkTheme ? oneDark : undefined}
                       onChange={(value) => {
                         setTabs(prev => prev.map(t => 
                           t.id === tab.id ? { ...t, query: value } : t

@@ -47,9 +47,9 @@ export function LLMQueryGenerator({
         .map(tableName => tableSchemas[tableName])
         .filter(Boolean);
 
-      console.log('Tables to include:', tablesToInclude);
-      console.log('Available table schemas:', Object.keys(tableSchemas));
-      console.log('Relevant schemas:', relevantSchemas);
+      // console.log('Tables to include:', tablesToInclude);
+      // console.log('Available table schemas:', Object.keys(tableSchemas));
+      // console.log('Relevant schemas:', relevantSchemas);
 
       const response = await fetch('/api/llm', {
         method: 'POST',

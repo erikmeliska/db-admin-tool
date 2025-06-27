@@ -67,15 +67,16 @@ export class MySQLConnection implements DatabaseConnection {
   }
 
   async getTableSchema(tableName: string): Promise<TableSchema> {
-    const columnsResult = await this.executeQuery(`DESCRIBE ${tableName}`);
+    // Use backticks to properly quote table names for case sensitivity
+    const columnsResult = await this.executeQuery(`DESCRIBE \`${tableName}\``);
     
     const columns: ColumnInfo[] = columnsResult.rows.map((row: Record<string, unknown>) => ({
-      name: row.Field,
-      type: row.Type,
+      name: row.Field as string,
+      type: row.Type as string,
       nullable: row.Null === 'YES',
-      key: row.Key || undefined,
+      key: row.Key as string || undefined,
       default: row.Default,
-      autoIncrement: row.Extra?.includes('auto_increment') || false,
+      autoIncrement: (row.Extra as string)?.includes('auto_increment') || false,
     }));
 
     return {

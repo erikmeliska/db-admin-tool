@@ -77,6 +77,7 @@ export function SecureConnectionManager({ onSessionSelect, selectedSession }: Se
       }
     }
 
+    // console.log('Creating session with data:', { ...formData, password: '[REDACTED]' });
     setIsLoading(true);
     try {
       const response = await fetch('/api/sessions', {
@@ -88,8 +89,11 @@ export function SecureConnectionManager({ onSessionSelect, selectedSession }: Se
         }),
       });
 
+      // console.log('Session creation response status:', response.status);
+      
       if (response.ok) {
         const data = await response.json();
+        // console.log('Session created successfully:', data.session);
         setSessions(prev => [...prev, data.session]);
         setShowAddForm(false);
         setFormData({
@@ -105,9 +109,11 @@ export function SecureConnectionManager({ onSessionSelect, selectedSession }: Se
         onSessionSelect(data.session);
       } else {
         const error = await response.json();
+        console.error('Session creation failed:', error);
         alert(`Failed to create session: ${error.error}`);
       }
     } catch (error) {
+      console.error('Network error during session creation:', error);
       alert(`Network error: ${error}`);
     } finally {
       setIsLoading(false);

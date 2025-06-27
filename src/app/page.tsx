@@ -1,47 +1,58 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ConnectionSession, TableSchema, QueryResult } from '@/types/database';
+import { ConnectionSession, QueryResult, TableSchema } from '@/types/database';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SecureConnectionManager } from '@/components/SecureConnectionManager';
 import { DatabaseExplorer } from '@/components/DatabaseExplorer';
 import { QueryEditor } from '@/components/QueryEditor';
 import { LLMQueryGenerator } from '@/components/LLMQueryGenerator';
-import { ThemeToggle } from '@/components/ThemeToggle';
 import { QueryHistory } from '@/components/QueryHistory';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
-import { Database, Code, Brain, Settings, History } from 'lucide-react';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { Database, Settings, Code, Brain, History, ChevronRight, Menu, ChevronLeft } from 'lucide-react';
 
 export default function Dashboard() {
   const [selectedSession, setSelectedSession] = useState<ConnectionSession | null>(null);
+  const [activeTab, setActiveTab] = useState('query');
+  const [queryToExecute, setQueryToExecute] = useState('');
   const [availableTables, setAvailableTables] = useState<string[]>([]);
   const [tableSchemas, setTableSchemas] = useState<Record<string, TableSchema>>({});
-  const [queryToExecute, setQueryToExecute] = useState('');
   const [loadingSchemas, setLoadingSchemas] = useState(false);
-  const [activeTab, setActiveTab] = useState('query');
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+  const [sidebarTab, setSidebarTab] = useState('connections');
 
   useEffect(() => {
     if (selectedSession) {
       loadTables();
+    } else {
+      setAvailableTables([]);
+      setTableSchemas({});
     }
   }, [selectedSession]);
 
   const loadTables = async () => {
     if (!selectedSession) return;
 
+    // console.log('Loading tables for session:', selectedSession.sessionId);
     try {
       const response = await fetch('/api/query?action=tables', {
         headers: {
           'Authorization': `Bearer ${selectedSession.sessionId}`
         }
       });
+      // console.log('Tables response status:', response.status);
       const result = await response.json();
+      // console.log('Tables response:', result);
       
       if (result.tables) {
         setAvailableTables(result.tables);
         // Load schemas for all tables
         await loadTableSchemas(result.tables);
+      } else if (result.error) {
+        console.error('Tables API error:', result.error);
       }
     } catch (error) {
       console.error('Failed to load tables:', error);
@@ -51,7 +62,7 @@ export default function Dashboard() {
   const loadTableSchemas = async (tables: string[]) => {
     if (!selectedSession) return;
 
-    console.log('Loading schemas for tables:', tables);
+    // console.log('Loading schemas for tables:', tables);
     setLoadingSchemas(true);
 
     try {
@@ -60,7 +71,7 @@ export default function Dashboard() {
       // Load schema for each table
       for (const tableName of tables) {
         try {
-          console.log(`Loading schema for table: ${tableName}`);
+          // console.log(`Loading schema for table: ${tableName}`);
           const response = await fetch(`/api/query?action=schema&table=${tableName}`, {
             headers: {
               'Authorization': `Bearer ${selectedSession.sessionId}`
@@ -68,11 +79,11 @@ export default function Dashboard() {
           });
           const result = await response.json();
           
-          console.log(`Schema result for ${tableName}:`, result);
+          // console.log(`Schema result for ${tableName}:`, result);
           
           if (result.schema) {
             schemas[tableName] = result.schema;
-            console.log(`Added schema for ${tableName}:`, result.schema);
+            // console.log(`Added schema for ${tableName}:`, result.schema);
           } else {
             console.warn(`No schema returned for table ${tableName}`);
           }
@@ -81,7 +92,7 @@ export default function Dashboard() {
         }
       }
       
-      console.log('Final schemas object:', schemas);
+      // console.log('Final schemas object:', schemas);
       setTableSchemas(schemas);
     } catch (error) {
       console.error('Failed to load table schemas:', error);
@@ -92,8 +103,14 @@ export default function Dashboard() {
 
   const handleTableSelect = (tableName: string, schema: TableSchema) => {
     setTableSchemas(prev => ({ ...prev, [tableName]: schema }));
-    // Generate a simple SELECT query for the selected table
-    setQueryToExecute(`SELECT * FROM ${tableName} LIMIT 10;`);
+    // Generate a simple SELECT query for the selected table with proper quoting
+    // Use backticks for MySQL, double quotes for PostgreSQL, square brackets for SQL Server
+    const quotedTableName = selectedSession?.type === 'postgresql' 
+      ? `"${tableName}"` 
+      : `\`${tableName}\``;
+    setQueryToExecute(`SELECT * FROM ${quotedTableName} LIMIT 10;`);
+    // Collapse the sidebar when a table is selected
+    setIsSidebarExpanded(false);
   };
 
   const handleQueryGenerated = (query: string) => {
@@ -107,6 +124,13 @@ export default function Dashboard() {
 
   const handleQueryExecuted = (query: string, result: QueryResult) => {
     console.log('Query executed:', query, result);
+  };
+
+  const handleSidebarTabChange = (tab: string) => {
+    setSidebarTab(tab);
+    if (tab === 'explorer' && !isSidebarExpanded) {
+      setIsSidebarExpanded(true);
+    }
   };
 
   return (
@@ -137,47 +161,112 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <div className="flex">
-        {/* Sidebar */}
-        <aside className="w-80 flex-shrink-0 bg-card border-r border-border h-[calc(100vh-81px)] overflow-y-auto">
-          <div className="p-4 lg:p-6">
-            <Tabs defaultValue="connections" className="space-y-4">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="connections" className="flex items-center space-x-2">
-                  <Settings className="w-4 h-4" />
-                  <span>Connections</span>
-                </TabsTrigger>
-                <TabsTrigger value="explorer" className="flex items-center space-x-2">
-                  <Database className="w-4 h-4" />
-                  <span>Explorer</span>
-                </TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="connections" className="mt-4">
-                <SecureConnectionManager 
-                  onSessionSelect={setSelectedSession}
-                  selectedSession={selectedSession}
-                />
-              </TabsContent>
-              
-              <TabsContent value="explorer" className="mt-4">
-                {selectedSession ? (
-                  <DatabaseExplorer 
-                    session={selectedSession}
-                    onTableSelect={handleTableSelect}
-                  />
-                ) : (
-                  <Card>
-                    <CardContent className="p-6 text-center">
-                      <Database className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                      <p className="text-muted-foreground">Create a secure session to explore the database</p>
-                    </CardContent>
-                  </Card>
-                )}
-              </TabsContent>
-            </Tabs>
+      <div className="flex relative">
+        {/* Collapsible Sidebar or Icon */}
+        {isSidebarExpanded ? (
+                     <aside className="w-[500px] flex-shrink-0 bg-card border-r border-border h-[calc(100vh-81px)] overflow-hidden transition-all duration-300 ease-in-out shadow-lg">
+            <div className="h-full flex flex-col">
+              {/* Sidebar Header with Collapse Button */}
+              <div className="flex items-center justify-between p-4 border-b border-border">
+                <h2 className="font-semibold text-foreground">Database Management</h2>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsSidebarExpanded(false)}
+                  className="h-8 w-8 p-0"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+              </div>
+
+              {/* Sidebar Content */}
+              <div className="flex-1 overflow-hidden">
+                <div className="p-4 h-full">
+                  <Tabs value={sidebarTab} onValueChange={handleSidebarTabChange} className="h-full flex flex-col">
+                    <TabsList className="grid w-full grid-cols-2 mb-4">
+                      <TabsTrigger value="connections" className="flex items-center space-x-2">
+                        <Settings className="w-4 h-4" />
+                        <span>Connections</span>
+                      </TabsTrigger>
+                      <TabsTrigger value="explorer" className="flex items-center space-x-2">
+                        <Database className="w-4 h-4" />
+                        <span>Explorer</span>
+                      </TabsTrigger>
+                    </TabsList>
+                    
+                    <div className="flex-1 overflow-hidden">
+                      <TabsContent value="connections" className="h-full overflow-y-auto mt-0">
+                        <SecureConnectionManager 
+                          onSessionSelect={setSelectedSession}
+                          selectedSession={selectedSession}
+                        />
+                      </TabsContent>
+                      
+                      <TabsContent value="explorer" className="h-full overflow-y-auto mt-0">
+                        {selectedSession ? (
+                          <DatabaseExplorer 
+                            onTableSelect={handleTableSelect}
+                            availableTables={availableTables}
+                            tableSchemas={tableSchemas}
+                            loadingSchemas={loadingSchemas}
+                          />
+                        ) : (
+                          <Card>
+                            <CardContent className="p-6 text-center">
+                              <Database className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                              <p className="text-muted-foreground">Create a secure session to explore the database</p>
+                            </CardContent>
+                          </Card>
+                        )}
+                      </TabsContent>
+                    </div>
+                  </Tabs>
+                </div>
+              </div>
+            </div>
+          </aside>
+        ) : (
+          /* Collapsed Sidebar - Just Icon */
+          <div className="w-12 flex-shrink-0 bg-card border-r border-border h-[calc(100vh-81px)] flex flex-col items-center py-4 space-y-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsSidebarExpanded(true)}
+              className="h-10 w-10 p-0"
+              title="Expand Sidebar"
+            >
+              <Menu className="w-5 h-5" />
+            </Button>
+            
+            {/* Tab indicators */}
+            <div className="flex flex-col space-y-1">
+              <Button
+                variant={sidebarTab === 'connections' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => {
+                  setSidebarTab('connections');
+                  setIsSidebarExpanded(true);
+                }}
+                className="h-8 w-8 p-0"
+                title="Connections"
+              >
+                <Settings className="w-4 h-4" />
+              </Button>
+              <Button
+                variant={sidebarTab === 'explorer' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => {
+                  setSidebarTab('explorer');
+                  setIsSidebarExpanded(true);
+                }}
+                className="h-8 w-8 p-0"
+                title="Database Explorer"
+              >
+                <Database className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
-        </aside>
+        )}
 
         {/* Main Content */}
         <main className="flex-1 min-w-0 p-4 lg:p-6 space-y-4 lg:space-y-6">
@@ -218,7 +307,6 @@ export default function Dashboard() {
                   </Card>
                 ) : (
                   <LLMQueryGenerator 
-                    session={selectedSession}
                     availableTables={availableTables}
                     tableSchemas={tableSchemas}
                     onQueryGenerated={handleQueryGenerated}
@@ -238,7 +326,7 @@ export default function Dashboard() {
                     setActiveTab('ai');
                     // Note: We'd need to expose methods to set prompt and tables in LLMQueryGenerator
                   }}
-                  currentSession={selectedSession}
+                  currentConnection={selectedSession?.name}
                 />
               </TabsContent>
             </Tabs>

@@ -31,15 +31,30 @@ export async function POST(request: NextRequest) {
     }
 
     const connection = await sessionManager.getConnection(sessionId);
-    await connection.connect();
+    
+    // Add timeout for query execution
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Query execution timeout after 30 seconds')), 30000);
+    });
     
     try {
-      const result = await connection.executeQuery(query);
+      // console.log('Executing query for session:', sessionId);
+      await connection.connect();
+      const result = await Promise.race([
+        connection.executeQuery(query),
+        timeoutPromise
+      ]);
       await connection.disconnect();
+      // console.log('Query executed successfully');
       
       return NextResponse.json(result);
     } catch (queryError) {
-      await connection.disconnect();
+      console.error('Query execution failed:', queryError);
+      try {
+        await connection.disconnect();
+      } catch (disconnectError) {
+        console.warn('Error during disconnect:', disconnectError);
+      }
       throw queryError;
     }
   } catch (error) {
@@ -75,26 +90,46 @@ export async function GET(request: NextRequest) {
     }
 
     const connection = await sessionManager.getConnection(sessionId);
-    await connection.connect();
+    
+    // Add timeout for database operations
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Database operation timeout after 30 seconds')), 30000);
+    });
     
     try {
       if (action === 'tables') {
-        const tables = await connection.getTables();
+        // console.log('Fetching tables for session:', sessionId);
+        await connection.connect();
+        const tables = await Promise.race([
+          connection.getTables(),
+          timeoutPromise
+        ]);
         await connection.disconnect();
+        // console.log('Tables fetched successfully:', tables);
         return NextResponse.json({ tables });
       } else if (action === 'schema' && tableName) {
-        const schema = await connection.getTableSchema(tableName);
+        // console.log('Fetching schema for table:', tableName);
+        await connection.connect();
+        const schema = await Promise.race([
+          connection.getTableSchema(tableName),
+          timeoutPromise
+        ]);
         await connection.disconnect();
+        // console.log('Schema fetched successfully for table:', tableName);
         return NextResponse.json({ schema });
       } else {
-        await connection.disconnect();
         return NextResponse.json(
           { error: 'Invalid action or missing parameters' },
           { status: 400 }
         );
       }
     } catch (actionError) {
-      await connection.disconnect();
+      console.error('Database operation failed:', actionError);
+      try {
+        await connection.disconnect();
+      } catch (disconnectError) {
+        console.warn('Error during disconnect:', disconnectError);
+      }
       throw actionError;
     }
   } catch (error) {
