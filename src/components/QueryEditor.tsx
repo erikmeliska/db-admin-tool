@@ -303,6 +303,17 @@ export function QueryEditor({
         };
       });
       
+      // Get API key from localStorage
+      const apiKey = localStorage.getItem('google-api-key');
+      if (!apiKey) {
+        setAiOperations(prev => ({ 
+          ...prev, 
+          explanation: 'Google API key not configured. Please set it in Settings.',
+          isExplaining: false 
+        }));
+        return;
+      }
+
       const response = await fetch('/api/llm', {
         method: 'POST',
         headers: { 
@@ -314,7 +325,8 @@ export function QueryEditor({
           description: 'Explain this SQL query in simple terms',
           query: editorContentRef.current,
           schema,
-          databaseType: session.type
+          databaseType: session.type,
+          apiKey
         }),
       });
 
@@ -356,6 +368,13 @@ export function QueryEditor({
         };
       });
       
+      // Get API key from localStorage
+      const apiKey = localStorage.getItem('google-api-key');
+      if (!apiKey) {
+        setAiOperations(prev => ({ ...prev, isFixing: false }));
+        return;
+      }
+
       const response = await fetch('/api/llm', {
         method: 'POST',
         headers: { 
@@ -367,7 +386,8 @@ export function QueryEditor({
           description: 'Fix any issues in this SQL query',
           query: editorContentRef.current,
           schema,
-          databaseType: session.type
+          databaseType: session.type,
+          apiKey
         }),
       });
 
@@ -409,6 +429,13 @@ export function QueryEditor({
         };
       });
       
+      // Get API key from localStorage
+      const apiKey = localStorage.getItem('google-api-key');
+      if (!apiKey) {
+        setAiOperations(prev => ({ ...prev, isModifying: false }));
+        return;
+      }
+
       const response = await fetch('/api/llm', {
         method: 'POST',
         headers: { 
@@ -420,7 +447,8 @@ export function QueryEditor({
           description: aiOperations.modifyPrompt,
           query: editorContentRef.current,
           schema,
-          databaseType: session.type
+          databaseType: session.type,
+          apiKey
         }),
       });
 
@@ -569,6 +597,17 @@ export function QueryEditor({
     setAiOperations(prev => ({ ...prev, isAsking: true, askResponse: '' }));
     
     try {
+      // Get API key from localStorage
+      const apiKey = localStorage.getItem('google-api-key');
+      if (!apiKey) {
+        setAiOperations(prev => ({ 
+          ...prev, 
+          askResponse: 'Google API key not configured. Please set it in Settings.',
+          isAsking: false 
+        }));
+        return;
+      }
+
       const response = await fetch('/api/llm', {
         method: 'POST',
         headers: {
@@ -580,7 +619,8 @@ export function QueryEditor({
           schema: getUsedTableSchemas(editorContentRef.current || '') || [],
           databaseType: session?.type,
           action: 'ask',
-          query: editorContentRef.current
+          query: editorContentRef.current,
+          apiKey
         }),
       });
 

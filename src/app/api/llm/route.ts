@@ -4,7 +4,6 @@ import { DatabaseType, TableSchema } from '@/types/database';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const MODEL = "gemini-2.0-flash-lite";
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,13 +13,15 @@ export async function POST(request: NextRequest) {
       schema, 
       databaseType,
       action = 'generate', // Default to generate for backward compatibility
-      query // For explain/fix/modify/ask actions
+      query, // For explain/fix/modify/ask actions
+      apiKey // Google API key from client
     }: { 
       description: string; 
       schema: TableSchema[]; 
       databaseType: DatabaseType;
       action?: 'generate' | 'explain' | 'fix' | 'modify' | 'ask';
       query?: string;
+      apiKey?: string;
     } = body;
     
     if (!description || !databaseType) {
@@ -30,13 +31,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!process.env.GOOGLE_API_KEY) {
+    // Use provided API key or fallback to environment variable
+    const googleApiKey = apiKey || process.env.GOOGLE_API_KEY;
+    if (!googleApiKey) {
       return NextResponse.json(
-        { error: 'Google API key not configured' },
-        { status: 500 }
+        { error: 'Google API key not provided. Please configure it in Settings.' },
+        { status: 400 }
       );
     }
 
+    const genAI = new GoogleGenerativeAI(googleApiKey);
     const model = genAI.getGenerativeModel({ 
       model: MODEL,
       generationConfig: {
@@ -46,7 +50,7 @@ export async function POST(request: NextRequest) {
     });
 
     let result: string;
-    let responseData: any;
+    let responseData: { query?: string; explanation?: string };
 
     switch (action) {
       case 'generate':
@@ -73,7 +77,7 @@ export async function POST(request: NextRequest) {
         
         const schemaContext = schema && schema.length > 0 
           ? schema.map(table => 
-              `Table: ${table.name}\nColumns: ${table.columns.map((col: any) => `${col.name} (${col.type})`).join(', ')}`
+              `Table: ${table.name}\nColumns: ${table.columns.map((col: { name: string; type: string }) => `${col.name} (${col.type})`).join(', ')}`
             ).join('\n\n')
           : 'No schema information available';
 
@@ -107,7 +111,7 @@ Explain in plain English that a non-technical person could understand.`;
 
         const fixSchemaContext = schema && schema.length > 0 
           ? schema.map(table => 
-              `Table: ${table.name}\nColumns: ${table.columns.map((col: any) => `${col.name} (${col.type})`).join(', ')}`
+              `Table: ${table.name}\nColumns: ${table.columns.map((col: { name: string; type: string }) => `${col.name} (${col.type})`).join(', ')}`
             ).join('\n\n')
           : '';
 
@@ -146,7 +150,7 @@ Return ONLY the corrected SQL query, no explanations.`;
 
         const modifySchemaContext = schema && schema.length > 0 
           ? schema.map(table => 
-              `Table: ${table.name}\nColumns: ${table.columns.map((col: any) => `${col.name} (${col.type})`).join(', ')}`
+              `Table: ${table.name}\nColumns: ${table.columns.map((col: { name: string; type: string }) => `${col.name} (${col.type})`).join(', ')}`
             ).join('\n\n')
           : '';
 
@@ -178,7 +182,7 @@ Please return the modified SQL query that implements the requested changes. Retu
 
         const askSchemaContext = schema && schema.length > 0 
           ? schema.map(table => 
-              `Table: ${table.name}\nColumns: ${table.columns.map((col: any) => `${col.name} (${col.type})`).join(', ')}`
+              `Table: ${table.name}\nColumns: ${table.columns.map((col: { name: string; type: string }) => `${col.name} (${col.type})`).join(', ')}`
             ).join('\n\n')
           : '';
 

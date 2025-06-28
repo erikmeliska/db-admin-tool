@@ -110,6 +110,13 @@ export function LLMQueryGenerator({
       // console.log('Available table schemas:', Object.keys(tableSchemas));
       // console.log('Relevant schemas:', relevantSchemas);
 
+      // Get API key from localStorage
+      const apiKey = localStorage.getItem('google-api-key');
+      if (!apiKey) {
+        setError('Google API key not configured. Please set it in Settings.');
+        return;
+      }
+
       const response = await fetch('/api/llm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -117,6 +124,7 @@ export function LLMQueryGenerator({
           description,
           schema: relevantSchemas,
           databaseType: databaseType || 'mysql',
+          apiKey,
         }),
       });
 

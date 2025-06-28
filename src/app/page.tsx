@@ -11,7 +11,7 @@ import { DatabaseExplorer } from "@/components/DatabaseExplorer";
 import { QueryEditor } from "@/components/QueryEditor";
 import { LLMQueryGenerator } from "@/components/LLMQueryGenerator";
 import { QueryHistory } from "@/components/QueryHistory";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { SettingsDialog } from "@/components/SettingsDialog";
 import {
     Database,
     Settings,
@@ -435,10 +435,8 @@ export default function Dashboard() {
                                 </Badge>
                             </div>
                         )}
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
+                        <SettingsDialog 
+                            onCleanupClick={() => {
                                 const removedItems = cleanupOldTabData();
                                 const storageSize = (
                                     getStorageSize() / 1024
@@ -450,12 +448,8 @@ export default function Dashboard() {
                                     `Cleaned up ${removedItems} old sessions. Current storage: ${storageSize}KB`
                                 );
                             }}
-                            title="Clean up old session data"
-                            className="text-xs"
-                        >
-                            🧹
-                        </Button>
-                        <ThemeToggle />
+                            getStorageSize={getStorageSize}
+                        />
                     </div>
                 </div>
             </header>

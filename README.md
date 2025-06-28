@@ -71,15 +71,22 @@ A modern, AI-powered database administration tool built with Next.js, featuring 
 - **Performance Optimized** - 95% reduction in initial API calls
 - **Smart Caching** - Once loaded, schemas persist in session
 
+### ⚙️ **Centralized Settings Management**
+- **Settings Dialog** - Unified configuration via cog wheel icon (⚙️)
+- **API Configuration** - Google AI API key management with show/hide toggle
+- **Theme Management** - Dark/Light/System theme selection with real-time preview
+- **Storage Management** - View usage and cleanup old session data
+- **About Information** - Version and build details
+
 ### 🎨 **Modern UI/UX**
-- **Dark/Light/System** theme support
+- **Dark/Light/System** theme support with instant switching
 - **Responsive design** for all devices
 - **Collapsible sidebar** - Smart space management (48px ↔ 500px)
 - **Auto-collapse** on table selection for better workflow
 - **Real-time** query execution and results
 - **Schema explorer** with expandable table structures
 - **Interactive JSON display** - Smart visualization of JSON/JSONB fields
-- **Manual cleanup utility** - 🧹 button for storage management
+- **Clean header design** - Consolidated controls in Settings dialog
 
 ### ⚡ **Performance & Optimization**
 - **Optimized Query Editor** - No cursor jumping or typing delays
@@ -348,9 +355,16 @@ The tool uses a **session-based security model**:
 - Filter by connection or date
 - Statistics dashboard showing usage metrics
 
-### 6. **Storage Management**
+### 6. **Settings & Configuration**
+- **Access Settings** via the cog wheel (⚙️) icon in the top-right header
+- **Configure Google API Key** for AI features with secure local storage
+- **Theme Selection** - Choose Light, Dark, or System theme with instant preview
+- **Storage Management** - View current usage and cleanup old session data
+- **Version Information** - Check current version and build details
+
+### 7. **Storage Management**
 - **Automatic cleanup** of old session data (keeps 5 recent sessions)
-- **Manual cleanup** with 🧹 button in header
+- **Manual cleanup** via Settings → Storage Management
 - **Storage optimization** prevents localStorage quota issues
 - **Graceful fallback** when storage limits reached
 
@@ -371,6 +385,14 @@ This application implements **enterprise-grade security**:
 ## 🛠️ Development
 
 ### Recent Improvements
+
+**v2.3.0 - Centralized Settings & Enhanced UX**
+- ✅ Centralized Settings dialog with cog wheel icon (⚙️) access
+- ✅ Google AI API key management with secure local storage
+- ✅ Integrated theme management (Light/Dark/System) with instant switching
+- ✅ Storage management with usage display and cleanup functionality
+- ✅ Clean header design with consolidated controls
+- ✅ Enhanced user experience with unified configuration
 
 **v2.2.0 - Table Metadata & Performance Optimization**
 - ✅ Table metadata display (row count, size in human-readable format)
