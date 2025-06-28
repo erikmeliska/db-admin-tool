@@ -95,12 +95,24 @@ A modern, AI-powered database administration tool built with Next.js, featuring 
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Option 1: Pre-built Docker (Fastest) ⚡
+
+**Just run the image - no setup required!**
+
+```bash
+docker run -d -p 8008:8008 -e GOOGLE_API_KEY=your_key ghcr.io/your-username/db-admin-tool:latest
+```
+
+Open [http://localhost:8008](http://localhost:8008) and start querying!
+
+### Option 2: Local Development
+
+**Prerequisites:**
 - **Node.js** 18+ 
 - **npm** or **yarn**
 - **Google AI API Key** for AI features
 
-### Installation
+**Installation:**
 
 1. **Clone the repository**
    ```bash
@@ -133,21 +145,99 @@ A modern, AI-powered database administration tool built with Next.js, featuring 
 
 ## 🐳 Docker Deployment
 
-### Quick Start
-```bash
-# Using Docker Compose
-docker-compose up -d
+### Pre-built Images (Recommended)
 
-# Or manually
+**GitHub Container Registry** - No build required!
+
+```bash
+# Latest version
+docker run -d -p 8008:8008 -e GOOGLE_API_KEY=your_key ghcr.io/your-username/db-admin-tool:latest
+
+# Specific version
+docker run -d -p 8008:8008 -e GOOGLE_API_KEY=your_key ghcr.io/your-username/db-admin-tool:v2.2.0
+
+# With persistent sessions
+docker run -d -p 8008:8008 \
+  -e GOOGLE_API_KEY=your_key \
+  -v ./sessions:/app/sessions \
+  ghcr.io/your-username/db-admin-tool:latest
+```
+
+### Docker Compose (Pre-built)
+```yaml
+version: '3.8'
+services:
+  db-admin-tool:
+    image: ghcr.io/your-username/db-admin-tool:latest
+    ports:
+      - "8008:8008"
+    environment:
+      - GOOGLE_API_KEY=your_google_api_key
+    volumes:
+      - ./sessions:/app/sessions
+    restart: unless-stopped
+```
+
+### Build from Source (Optional)
+```bash
+# Clone and build locally
+git clone <repository-url>
+cd db-admin-tool
 docker build -t db-admin-tool .
 docker run -d -p 8008:8008 -e GOOGLE_API_KEY=your_key db-admin-tool
 ```
 
 **Image Details:**
-- Size: ~203MB (optimized multi-stage build)
-- Base: Node 20 Alpine
-- Security: Non-root user execution
-- Port: 8008
+- **Registry**: GitHub Container Registry (GHCR)
+- **Architectures**: linux/amd64, linux/arm64
+- **Size**: ~203MB (optimized multi-stage build)
+- **Base**: Node 20 Alpine
+- **Security**: Non-root user execution
+- **Port**: 8008
+- **Auto-built**: Every commit to main branch
+
+## 🔄 CI/CD Pipeline
+
+### Automated Docker Builds
+
+The project includes a **GitHub Actions workflow** that automatically:
+
+- ✅ **Builds multi-architecture images** (linux/amd64, linux/arm64)
+- ✅ **Publishes to GitHub Container Registry** (GHCR)
+- ✅ **Tags images automatically**:
+  - `latest` - Latest commit on main branch
+  - `v1.2.3` - Semantic version tags
+  - `main` - Main branch builds
+- ✅ **Caches build layers** for faster subsequent builds
+- ✅ **Generates build attestations** for supply chain security
+- ✅ **Supports pull request builds** (without publishing)
+
+### Workflow Triggers
+
+- **Push to main** → Build and publish `latest` + `main` tags
+- **Version tags** (`v*`) → Build and publish semantic version tags
+- **Pull requests** → Build only (no publish) for testing
+
+### Using Pre-built Images
+
+```bash
+# Always get the latest
+docker pull ghcr.io/your-username/db-admin-tool:latest
+
+# Pin to specific version
+docker pull ghcr.io/your-username/db-admin-tool:v2.2.0
+
+# Check available tags
+# Visit: https://github.com/your-username/db-admin-tool/pkgs/container/db-admin-tool
+```
+
+### For Contributors
+
+The CI/CD pipeline ensures:
+- **No manual builds needed** - Just push code
+- **Consistent environments** - Same image for dev/prod
+- **Security scanning** - Automated vulnerability checks
+- **Multi-platform support** - Works on Intel and ARM
 
 ## 🔧 Configuration
 
