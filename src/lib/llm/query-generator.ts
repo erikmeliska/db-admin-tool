@@ -3,7 +3,8 @@ import { DatabaseType, TableSchema } from '@/types/database';
 
 const MODEL = "gemini-2.0-flash-lite";
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
+// Note: This file is kept for backward compatibility, but the main LLM functionality
+// now uses API keys sent from the client via the /api/llm route
 
 export const generateQueryPrompt = (
   description: string,
@@ -56,9 +57,19 @@ SQL Query:`;
 export async function generateSQLQuery(
   description: string,
   schema: TableSchema[],
-  databaseType: DatabaseType
+  databaseType: DatabaseType,
+  apiKey?: string
 ): Promise<string> {
+  // This function is deprecated in favor of the /api/llm route
+  // but kept for backward compatibility
+  
+  const effectiveApiKey = apiKey || process.env.GOOGLE_API_KEY;
+  if (!effectiveApiKey) {
+    throw new Error('Google API key is required. Please configure it in Settings.');
+  }
+
   try {
+    const genAI = new GoogleGenerativeAI(effectiveApiKey);
     const prompt = generateQueryPrompt(description, schema, databaseType);
     
     const model = genAI.getGenerativeModel({ 

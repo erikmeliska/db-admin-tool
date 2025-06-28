@@ -161,6 +161,11 @@ docker run -d -p 8008:8008 -v ./sessions:/app/sessions ghcr.io/erikmeliska/db-ad
 docker run -d -p 8008:8008 -v ./sessions:/app/sessions ghcr.io/erikmeliska/db-admin-tool:v2.2.0
 ```
 
+**Important**: The `./sessions` volume mount is essential for:
+- **Session persistence** - Database connections survive container restarts
+- **Encryption key storage** - Automatically generated encryption key is preserved
+- **Data security** - Without the volume, all sessions and the encryption key are lost on container restart
+
 ### Docker Compose (Pre-built)
 ```yaml
 version: '3.8'
@@ -241,7 +246,9 @@ The CI/CD pipeline ensures:
 
 **Google AI API Key**: Configure via the Settings dialog (⚙️ icon) in the web interface after starting the application. The API key is stored securely in your browser's localStorage and sent with each AI request.
 
-**No environment variables required** - all configuration is handled through the UI.
+**Session Encryption**: The application automatically generates a secure encryption key on first run to protect stored database credentials. The key is saved to `sessions/.encryption-key` and should be backed up for data recovery.
+
+**No environment variables required** - all configuration is handled automatically or through the UI.
 
 ### Secure Database Connections
 

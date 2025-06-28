@@ -3,6 +3,7 @@ import { connectionManager } from './database/connections';
 import { DatabaseConnection } from './database/types';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import CryptoJS from 'crypto-js';
 
 interface StoredSessionData {
@@ -20,7 +21,8 @@ class SessionManager {
   }>();
   
   private readonly sessionsDir = path.join(process.cwd(), 'sessions');
-  private readonly encryptionKey = process.env.SESSION_ENCRYPTION_KEY || 'default-dev-key-change-in-production';
+  private readonly encryptionKeyFile = path.join(process.cwd(), 'sessions', '.encryption-key');
+  private encryptionKey: string = '';
   private initializationPromise: Promise<void>;
   private isInitialized = false;
 
@@ -31,6 +33,7 @@ class SessionManager {
   private async initializeAsync(): Promise<void> {
     try {
       await this.ensureSessionsDir();
+      await this.ensureEncryptionKey();
       await this.loadExistingSessions();
       this.isInitialized = true;
     } catch (error) {
@@ -50,6 +53,32 @@ class SessionManager {
       await fs.access(this.sessionsDir);
     } catch {
       await fs.mkdir(this.sessionsDir, { recursive: true });
+    }
+  }
+
+  private async ensureEncryptionKey(): Promise<void> {
+    // Check if we have an environment variable first (for backward compatibility)
+    if (process.env.SESSION_ENCRYPTION_KEY) {
+      this.encryptionKey = process.env.SESSION_ENCRYPTION_KEY;
+      console.log('Using encryption key from environment variable');
+      return;
+    }
+
+    try {
+      // Try to load existing key from file
+      const existingKey = await fs.readFile(this.encryptionKeyFile, 'utf8');
+      this.encryptionKey = existingKey.trim();
+      console.log('Loaded existing encryption key from file');
+    } catch {
+      // Generate new key if file doesn't exist
+      this.encryptionKey = crypto.randomBytes(32).toString('hex');
+      try {
+        await fs.writeFile(this.encryptionKeyFile, this.encryptionKey, { mode: 0o600 });
+        console.log('Generated new encryption key and saved to file');
+      } catch (writeError) {
+        console.warn('Could not save encryption key to file:', writeError);
+        console.log('Using generated key for this session only');
+      }
     }
   }
 
