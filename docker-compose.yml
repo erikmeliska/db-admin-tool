@@ -8,6 +8,6 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=8008
-    env_file:
-      - .env
+    volumes:
+      - ./sessions:/app/sessions
     restart: unless-stopped 

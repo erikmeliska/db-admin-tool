@@ -13,7 +13,7 @@ docker images db-admin-tool:latest --format "table {{.Repository}}\t{{.Tag}}\t{{
 
 echo ""
 echo "🚀 To run the container:"
-echo "docker run -p 8008:8008 -e GOOGLE_API_KEY=your_key db-admin-tool:latest"
+echo "docker run -p 8008:8008 -v ./sessions:/app/sessions db-admin-tool:latest"
 echo ""
 echo "📋 Or use docker-compose:"
 echo "docker-compose up -d" 

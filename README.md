@@ -107,7 +107,7 @@ A modern, AI-powered database administration tool built with Next.js, featuring 
 **Just run the image - no setup required!**
 
 ```bash
-docker run -d -p 8008:8008 -e GOOGLE_API_KEY=your_key ghcr.io/erikmeliska/db-admin-tool:latest
+docker run -d -p 8008:8008 -v ./sessions:/app/sessions ghcr.io/erikmeliska/db-admin-tool:latest
 ```
 
 Open [http://localhost:8008](http://localhost:8008) and start querying!
@@ -137,10 +137,7 @@ Open [http://localhost:8008](http://localhost:8008) and start querying!
    cp .env.example .env.local
    ```
    
-   Add your Google AI API key:
-   ```env
-   GOOGLE_API_KEY=your_google_gemini_api_key
-   ```
+   **Note**: API configuration is now handled via the Settings dialog (⚙️ icon) in the web interface.
 
 4. **Run the development server**
    ```bash
@@ -158,16 +155,10 @@ Open [http://localhost:8008](http://localhost:8008) and start querying!
 
 ```bash
 # Latest version
-docker run -d -p 8008:8008 -e GOOGLE_API_KEY=your_key ghcr.io/erikmeliska/db-admin-tool:latest
+docker run -d -p 8008:8008 -v ./sessions:/app/sessions ghcr.io/erikmeliska/db-admin-tool:latest
 
-# Specific version
-docker run -d -p 8008:8008 -e GOOGLE_API_KEY=your_key ghcr.io/erikmeliska/db-admin-tool:v2.2.0
-
-# With persistent sessions
-docker run -d -p 8008:8008 \
-  -e GOOGLE_API_KEY=your_key \
-  -v ./sessions:/app/sessions \
-  ghcr.io/erikmeliska/db-admin-tool:latest
+# Specific version  
+docker run -d -p 8008:8008 -v ./sessions:/app/sessions ghcr.io/erikmeliska/db-admin-tool:v2.2.0
 ```
 
 ### Docker Compose (Pre-built)
@@ -178,8 +169,6 @@ services:
     image: ghcr.io/erikmeliska/db-admin-tool:latest
     ports:
       - "8008:8008"
-    environment:
-      - GOOGLE_API_KEY=your_google_api_key
     volumes:
       - ./sessions:/app/sessions
     restart: unless-stopped
@@ -191,7 +180,7 @@ services:
 git clone <repository-url>
 cd db-admin-tool
 docker build -t db-admin-tool .
-docker run -d -p 8008:8008 -e GOOGLE_API_KEY=your_key db-admin-tool
+docker run -d -p 8008:8008 -v ./sessions:/app/sessions db-admin-tool
 ```
 
 **Image Details:**
@@ -248,11 +237,11 @@ The CI/CD pipeline ensures:
 
 ## 🔧 Configuration
 
-### Environment Variables
+### API Configuration
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `GOOGLE_API_KEY` | Google AI API key for Gemini integration | Yes |
+**Google AI API Key**: Configure via the Settings dialog (⚙️ icon) in the web interface after starting the application. The API key is stored securely in your browser's localStorage and sent with each AI request.
+
+**No environment variables required** - all configuration is handled through the UI.
 
 ### Secure Database Connections
 
