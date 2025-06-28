@@ -32,12 +32,19 @@ export interface TableSchema {
   foreignKeys?: ForeignKeyInfo[];
 }
 
+export interface TableMetadata {
+  name: string;
+  rowCount: number;
+  sizeBytes: number;
+  sizeFormatted: string;
+}
+
 export interface ColumnInfo {
   name: string;
   type: string;
   nullable: boolean;
   key?: string;
-  default?: any;
+  default?: unknown;
   autoIncrement?: boolean;
 }
 
@@ -56,7 +63,7 @@ export interface ForeignKeyInfo {
 
 export interface QueryResult {
   columns: string[];
-  rows: any[];
+  rows: Record<string, unknown>[];
   affectedRows?: number;
   executionTime: number;
   error?: string;

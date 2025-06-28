@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { TableSchema } from '@/types/database';
+import React, { useState, useEffect } from 'react';
+import { TableSchema, TableMetadata } from '@/types/database';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,39 +15,106 @@ import {
   Type, 
   Search,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  RefreshCw
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
 interface DatabaseExplorerProps {
-  onTableSelect: (tableName: string, schema: TableSchema) => void;
+  onTableSelect: (tableName: string, schema?: TableSchema) => void;
   availableTables: string[];
   tableSchemas: Record<string, TableSchema>;
   loadingSchemas: boolean;
+  sessionId: string | null;
+  onLoadTableSchema?: (tableName: string) => Promise<void>;
 }
 
 export function DatabaseExplorer({ 
   onTableSelect, 
   availableTables, 
   tableSchemas, 
-  loadingSchemas 
+  loadingSchemas,
+  sessionId,
+  onLoadTableSchema
 }: DatabaseExplorerProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
+  const [tableMetadata, setTableMetadata] = useState<Record<string, TableMetadata>>({});
+  const [loadingMetadata, setLoadingMetadata] = useState(false);
 
-  const handleTableClick = (tableName: string) => {
-    const schema = tableSchemas[tableName];
-    if (schema) {
-      onTableSelect(tableName, schema);
+  // Fetch table metadata
+  const fetchMetadata = async () => {
+    if (!sessionId) return;
+    
+    try {
+      const response = await fetch('/api/metadata', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${sessionId}`,
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.metadata) {
+          setTableMetadata(data.metadata);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch metadata:', error);
     }
   };
 
-  const toggleTableExpansion = (tableName: string) => {
+  // Refresh table metadata
+  const refreshMetadata = async () => {
+    if (!sessionId) return;
+    
+    setLoadingMetadata(true);
+    try {
+      const response = await fetch('/api/metadata', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${sessionId}`,
+        },
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.metadata) {
+          setTableMetadata(data.metadata);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to refresh metadata:', error);
+    } finally {
+      setLoadingMetadata(false);
+    }
+  };
+
+  // Load metadata on component mount and when sessionId changes
+  useEffect(() => {
+    if (sessionId && availableTables.length > 0) {
+      fetchMetadata();
+    }
+  }, [sessionId, availableTables]);
+
+  const handleTableClick = (tableName: string) => {
+    const schema = tableSchemas[tableName];
+    // Always call onTableSelect, even if schema is not loaded yet
+    // The parent component will load it on demand
+    onTableSelect(tableName, schema);
+  };
+
+  const toggleTableExpansion = async (tableName: string) => {
     const newExpanded = new Set(expandedTables);
     if (newExpanded.has(tableName)) {
       newExpanded.delete(tableName);
     } else {
       newExpanded.add(tableName);
+      // Load schema if not already loaded
+      if (!tableSchemas[tableName] && onLoadTableSchema) {
+        await onLoadTableSchema(tableName);
+      }
     }
     setExpandedTables(newExpanded);
   };
@@ -74,6 +141,15 @@ export function DatabaseExplorer({
           <Database className="w-5 h-5 text-primary" />
           <h3 className="font-semibold">Database Explorer</h3>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={refreshMetadata}
+          disabled={loadingMetadata || !sessionId}
+          className="h-8 w-8 p-0"
+        >
+          <RefreshCw className={`w-4 h-4 ${loadingMetadata ? 'animate-spin' : ''}`} />
+        </Button>
       </div>
 
       {/* Search */}
@@ -132,11 +208,23 @@ export function DatabaseExplorer({
                         {tableName}
                       </span>
                     </div>
-                    {schema && (
-                      <Badge variant="secondary" className="text-xs">
-                        {schema.columns.length} cols
-                      </Badge>
-                    )}
+                    <div className="flex items-center space-x-1">
+                      {schema && (
+                        <Badge variant="secondary" className="text-xs">
+                          {schema.columns.length} cols
+                        </Badge>
+                      )}
+                      {tableMetadata[tableName] && (
+                        <>
+                          <Badge variant="outline" className="text-xs">
+                            {tableMetadata[tableName].rowCount.toLocaleString()} rows
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {tableMetadata[tableName].sizeFormatted}
+                          </Badge>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
                 

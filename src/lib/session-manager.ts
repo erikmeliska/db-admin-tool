@@ -1,4 +1,4 @@
-import { ConnectionConfig, ConnectionSession } from '@/types/database';
+import { ConnectionConfig, ConnectionSession, TableMetadata } from '@/types/database';
 import { connectionManager } from './database/connections';
 import { DatabaseConnection } from './database/types';
 import * as fs from 'fs/promises';
@@ -8,6 +8,7 @@ import CryptoJS from 'crypto-js';
 interface StoredSessionData {
   config: ConnectionConfig;
   session: ConnectionSession;
+  metadata?: Record<string, TableMetadata>;
 }
 
 class SessionManager {
@@ -15,6 +16,7 @@ class SessionManager {
     config: ConnectionConfig;
     session: ConnectionSession;
     connection?: DatabaseConnection;
+    metadata?: Record<string, TableMetadata>;
   }>();
   
   private readonly sessionsDir = path.join(process.cwd(), 'sessions');
@@ -110,7 +112,8 @@ class SessionManager {
           if (now <= expiresAt) {
             this.sessions.set(sessionId, {
               ...sessionData,
-              connection: undefined // Don't restore connections
+              connection: undefined, // Don't restore connections
+              metadata: sessionData.metadata || undefined
             });
           } else {
             // Delete expired session file
@@ -204,6 +207,7 @@ class SessionManager {
     this.sessions.set(sessionId, {
       ...sessionData,
       connection: undefined,
+      metadata: undefined, // Will be loaded on first request
     });
 
     // Save to encrypted file
@@ -334,6 +338,82 @@ class SessionManager {
     return Array.from(this.sessions.values())
       .filter(sessionData => now < new Date(sessionData.session.expiresAt))
       .map(sessionData => sessionData.session);
+  }
+
+  // Get cached table metadata for a session
+  async getTableMetadata(sessionId: string): Promise<Record<string, TableMetadata> | null> {
+    await this.ensureInitialized();
+    
+    const sessionData = this.sessions.get(sessionId);
+    if (!sessionData) {
+      return null;
+    }
+
+    return sessionData.metadata || null;
+  }
+
+  // Refresh table metadata for a session
+  async refreshTableMetadata(sessionId: string): Promise<Record<string, TableMetadata>> {
+    await this.ensureInitialized();
+    
+    const sessionData = this.sessions.get(sessionId);
+    if (!sessionData) {
+      throw new Error('Session not found');
+    }
+
+    // Check if session is expired
+    if (new Date() > sessionData.session.expiresAt) {
+      this.sessions.delete(sessionId);
+      await this.deleteSessionFromDisk(sessionId);
+      throw new Error('Session expired');
+    }
+
+    const connection = connectionManager.createConnection(sessionData.config);
+    
+    try {
+      await connection.connect();
+      
+      // Get all tables
+      const tables = await connection.getTables();
+      const metadata: Record<string, TableMetadata> = {};
+      
+      // Get metadata for each table
+      for (const tableName of tables) {
+        try {
+          metadata[tableName] = await connection.getTableMetadata(tableName);
+        } catch (error) {
+          console.warn(`Failed to get metadata for table ${tableName}:`, error);
+          // Add fallback metadata
+          metadata[tableName] = {
+            name: tableName,
+            rowCount: 0,
+            sizeBytes: 0,
+            sizeFormatted: 'Unknown'
+          };
+        }
+      }
+      
+      await connection.disconnect();
+      
+      // Update session data
+      sessionData.metadata = metadata;
+      
+      // Save to disk
+      await this.saveSessionToDisk(sessionId, {
+        config: sessionData.config,
+        session: sessionData.session,
+        metadata
+      });
+      
+      return metadata;
+    } catch (error) {
+      try {
+        await connection.disconnect();
+      } catch (disconnectError) {
+        console.warn('Error during disconnect:', disconnectError);
+      }
+      throw new Error(`Failed to refresh table metadata: ${error}`);
+    }
   }
 }
 

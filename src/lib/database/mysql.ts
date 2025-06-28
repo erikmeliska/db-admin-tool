@@ -1,5 +1,5 @@
 import mysql from 'mysql2/promise';
-import { ConnectionConfig, QueryResult, TableSchema, ColumnInfo } from '@/types/database';
+import { ConnectionConfig, QueryResult, TableSchema, ColumnInfo, TableMetadata } from '@/types/database';
 import { DatabaseConnection } from './types';
 
 export class MySQLConnection implements DatabaseConnection {
@@ -83,6 +83,78 @@ export class MySQLConnection implements DatabaseConnection {
       name: tableName,
       columns,
     };
+  }
+
+  async getTableMetadata(tableName: string): Promise<TableMetadata> {
+    try {
+      // Get table size and row count from information_schema
+      const sizeQuery = `
+        SELECT 
+          table_rows as row_count,
+          (data_length + index_length) as size_bytes
+        FROM information_schema.tables 
+        WHERE table_schema = ? AND table_name = ?
+      `;
+      
+      const result = await this.executeQuery(
+        sizeQuery.replace(/\?/g, `'${this.config.database}', '${tableName}'`)
+      );
+      
+      if (result.rows.length === 0) {
+        // Fallback: get row count with COUNT query
+        const countResult = await this.executeQuery(`SELECT COUNT(*) as count FROM \`${tableName}\``);
+        const rowCount = Number(countResult.rows[0]?.count) || 0;
+        
+        return {
+          name: tableName,
+          rowCount,
+          sizeBytes: 0,
+          sizeFormatted: this.formatBytes(0)
+        };
+      }
+      
+      const row = result.rows[0];
+      const rowCount = Number(row.row_count) || 0;
+      const sizeBytes = Number(row.size_bytes) || 0;
+      
+      return {
+        name: tableName,
+        rowCount,
+        sizeBytes,
+        sizeFormatted: this.formatBytes(sizeBytes)
+      };
+    } catch (error) {
+      console.warn(`Failed to get metadata for table ${tableName}:`, error);
+      // Fallback: just get row count
+      try {
+        const countResult = await this.executeQuery(`SELECT COUNT(*) as count FROM \`${tableName}\``);
+        const rowCount = Number(countResult.rows[0]?.count) || 0;
+        
+        return {
+          name: tableName,
+          rowCount,
+          sizeBytes: 0,
+          sizeFormatted: 'Unknown'
+        };
+      } catch {
+        return {
+          name: tableName,
+          rowCount: 0,
+          sizeBytes: 0,
+          sizeFormatted: 'Unknown'
+        };
+      }
+    }
+  }
+
+  private formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    
+    const k = 1024;
+    const sizes = ['B', 'kB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
   }
 
   async testConnection(): Promise<boolean> {

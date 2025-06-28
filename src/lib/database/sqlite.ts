@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { ConnectionConfig, QueryResult, TableSchema, ColumnInfo } from '@/types/database';
+import { ConnectionConfig, QueryResult, TableSchema, ColumnInfo, TableMetadata } from '@/types/database';
 import { DatabaseConnection } from './types';
 
 export class SQLiteConnection implements DatabaseConnection {
@@ -42,11 +42,11 @@ export class SQLiteConnection implements DatabaseConnection {
         const rows = stmt.all();
         const executionTime = Date.now() - startTime;
         
-        const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+        const columns = rows.length > 0 ? Object.keys(rows[0] as Record<string, unknown>) : [];
         
         return {
           columns,
-          rows,
+          rows: rows as Record<string, unknown>[],
           executionTime,
         };
       } else {
@@ -78,18 +78,70 @@ export class SQLiteConnection implements DatabaseConnection {
     const result = await this.executeQuery(`PRAGMA table_info(${tableName})`);
     
     const columns: ColumnInfo[] = result.rows.map((row: Record<string, unknown>) => ({
-      name: row.name,
-      type: row.type,
+      name: row.name as string,
+      type: row.type as string,
       nullable: !row.notnull,
       key: row.pk ? 'PRI' : undefined,
       default: row.dflt_value,
-      autoIncrement: row.pk && row.type.toLowerCase().includes('integer'),
+      autoIncrement: Boolean(row.pk) && (row.type as string).toLowerCase().includes('integer'),
     }));
 
     return {
       name: tableName,
       columns,
     };
+  }
+
+  async getTableMetadata(tableName: string): Promise<TableMetadata> {
+    try {
+      // Get row count
+      const countResult = await this.executeQuery(`SELECT COUNT(*) as count FROM ${tableName}`);
+      const rowCount = Number(countResult.rows[0]?.count) || 0;
+      
+      // SQLite doesn't have built-in size calculation, so we estimate
+      // by getting the page count and page size
+      try {
+        const pageSizeResult = await this.executeQuery(`PRAGMA page_size`);
+        const pageCountResult = await this.executeQuery(`PRAGMA page_count`);
+        
+        const pageSize = Number(pageSizeResult.rows[0]?.page_size) || 4096;
+        const pageCount = Number(pageCountResult.rows[0]?.page_count) || 0;
+        const sizeBytes = pageSize * pageCount;
+        
+        return {
+          name: tableName,
+          rowCount,
+          sizeBytes,
+          sizeFormatted: this.formatBytes(sizeBytes)
+        };
+      } catch {
+        // Fallback if pragma queries fail
+        return {
+          name: tableName,
+          rowCount,
+          sizeBytes: 0,
+          sizeFormatted: 'Unknown'
+        };
+      }
+    } catch (error) {
+      console.warn(`Failed to get metadata for table ${tableName}:`, error);
+      return {
+        name: tableName,
+        rowCount: 0,
+        sizeBytes: 0,
+        sizeFormatted: 'Unknown'
+      };
+    }
+  }
+
+  private formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    
+    const k = 1024;
+    const sizes = ['B', 'kB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
   }
 
   async testConnection(): Promise<boolean> {

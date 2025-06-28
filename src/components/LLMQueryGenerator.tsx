@@ -22,6 +22,7 @@ interface LLMQueryGeneratorProps {
   connectionName?: string;
   prefilledPrompt?: string;
   prefilledTables?: string[];
+  onLoadTableSchemas?: (tables: string[]) => Promise<void>;
 }
 
 export function LLMQueryGenerator({ 
@@ -33,7 +34,8 @@ export function LLMQueryGenerator({
   databaseType,
   connectionName,
   prefilledPrompt,
-  prefilledTables
+  prefilledTables,
+  onLoadTableSchemas
 }: LLMQueryGeneratorProps) {
   // Persistent state keys
   const stateKey = sessionId ? `llm-state-${sessionId}` : 'llm-state-default';
@@ -93,6 +95,13 @@ export function LLMQueryGenerator({
     try {
       // Get schema for selected tables (or all if none selected)
       const tablesToInclude = selectedTables.length > 0 ? selectedTables : availableTables;
+      
+      // Load schemas for tables that don't have them yet
+      const missingSchemas = tablesToInclude.filter(tableName => !tableSchemas[tableName]);
+      if (missingSchemas.length > 0 && onLoadTableSchemas) {
+        await onLoadTableSchemas(missingSchemas);
+      }
+      
       const relevantSchemas = tablesToInclude
         .map(tableName => tableSchemas[tableName])
         .filter(Boolean);
@@ -266,14 +275,30 @@ export function LLMQueryGenerator({
         {selectedTables.length > 0 && (
           <Accordion type="single" collapsible>
             <AccordionItem value="schema-preview">
-              <AccordionTrigger className="text-sm">
+              <AccordionTrigger 
+                className="text-sm"
+                onClick={async () => {
+                  // Load schemas for selected tables that don't have them yet
+                  const missingSchemas = selectedTables.filter(tableName => !tableSchemas[tableName]);
+                  if (missingSchemas.length > 0 && onLoadTableSchemas) {
+                    await onLoadTableSchemas(missingSchemas);
+                  }
+                }}
+              >
                 Preview Selected Tables Schema
               </AccordionTrigger>
               <AccordionContent>
                 <div className="space-y-3">
                   {selectedTables.map(tableName => {
                     const schema = tableSchemas[tableName];
-                    if (!schema) return null;
+                    if (!schema) {
+                      return (
+                        <div key={tableName} className="bg-gray-50 p-3 rounded">
+                          <div className="font-medium text-sm mb-2">{tableName}</div>
+                          <div className="text-xs text-gray-500 italic">Loading schema...</div>
+                        </div>
+                      );
+                    }
                     
                     return (
                       <div key={tableName} className="bg-gray-50 p-3 rounded">

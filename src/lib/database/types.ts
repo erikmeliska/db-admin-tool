@@ -1,4 +1,4 @@
-import { ConnectionConfig, QueryResult, TableSchema } from '@/types/database';
+import { ConnectionConfig, QueryResult, TableSchema, TableMetadata } from '@/types/database';
 
 export interface DatabaseConnection {
   connect(): Promise<void>;
@@ -6,6 +6,7 @@ export interface DatabaseConnection {
   executeQuery(query: string): Promise<QueryResult>;
   getTables(): Promise<string[]>;
   getTableSchema(tableName: string): Promise<TableSchema>;
+  getTableMetadata(tableName: string): Promise<TableMetadata>;
   testConnection(): Promise<boolean>;
 }
 
