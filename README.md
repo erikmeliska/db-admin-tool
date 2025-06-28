@@ -100,7 +100,7 @@ A modern, AI-powered database administration tool built with Next.js, featuring 
 **Just run the image - no setup required!**
 
 ```bash
-docker run -d -p 8008:8008 -e GOOGLE_API_KEY=your_key ghcr.io/your-username/db-admin-tool:latest
+docker run -d -p 8008:8008 -e GOOGLE_API_KEY=your_key ghcr.io/erikmeliska/db-admin-tool:latest
 ```
 
 Open [http://localhost:8008](http://localhost:8008) and start querying!
@@ -151,16 +151,16 @@ Open [http://localhost:8008](http://localhost:8008) and start querying!
 
 ```bash
 # Latest version
-docker run -d -p 8008:8008 -e GOOGLE_API_KEY=your_key ghcr.io/your-username/db-admin-tool:latest
+docker run -d -p 8008:8008 -e GOOGLE_API_KEY=your_key ghcr.io/erikmeliska/db-admin-tool:latest
 
 # Specific version
-docker run -d -p 8008:8008 -e GOOGLE_API_KEY=your_key ghcr.io/your-username/db-admin-tool:v2.2.0
+docker run -d -p 8008:8008 -e GOOGLE_API_KEY=your_key ghcr.io/erikmeliska/db-admin-tool:v2.2.0
 
 # With persistent sessions
 docker run -d -p 8008:8008 \
   -e GOOGLE_API_KEY=your_key \
   -v ./sessions:/app/sessions \
-  ghcr.io/your-username/db-admin-tool:latest
+  ghcr.io/erikmeliska/db-admin-tool:latest
 ```
 
 ### Docker Compose (Pre-built)
@@ -168,7 +168,7 @@ docker run -d -p 8008:8008 \
 version: '3.8'
 services:
   db-admin-tool:
-    image: ghcr.io/your-username/db-admin-tool:latest
+    image: ghcr.io/erikmeliska/db-admin-tool:latest
     ports:
       - "8008:8008"
     environment:
@@ -222,13 +222,13 @@ The project includes a **GitHub Actions workflow** that automatically:
 
 ```bash
 # Always get the latest
-docker pull ghcr.io/your-username/db-admin-tool:latest
+docker pull ghcr.io/erikmeliska/db-admin-tool:latest
 
 # Pin to specific version
-docker pull ghcr.io/your-username/db-admin-tool:v2.2.0
+docker pull ghcr.io/erikmeliska/db-admin-tool:v2.2.0
 
 # Check available tags
-# Visit: https://github.com/your-username/db-admin-tool/pkgs/container/db-admin-tool
+# Visit: https://github.com/erikmeliska/db-admin-tool/pkgs/container/db-admin-tool
 ```
 
 ### For Contributors
