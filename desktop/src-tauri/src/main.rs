@@ -2,9 +2,10 @@
 // Node runtime on 127.0.0.1 and shows it in a native (WebKit) window.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
-use std::process::{Child, Command};
+use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
@@ -15,14 +16,35 @@ const PREFERRED_PORT: u16 = 18008;
 
 struct Server(Mutex<Option<Child>>);
 
-fn pick_port() -> u16 {
-    if TcpListener::bind(("127.0.0.1", PREFERRED_PORT)).is_ok() {
-        return PREFERRED_PORT;
-    }
+fn free_port() -> u16 {
     TcpListener::bind(("127.0.0.1", 0))
         .and_then(|l| l.local_addr())
         .map(|a| a.port())
         .unwrap_or(PREFERRED_PORT)
+}
+
+/// Per-launch secret shared with the server (APP_TOKEN) and the webview (cookie).
+fn random_token() -> std::io::Result<String> {
+    let mut buf = [0u8; 32];
+    std::fs::File::open("/dev/urandom")?.read_exact(&mut buf)?;
+    Ok(buf.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+/// True once the server answers on `port` and reports our child's pid, so we never
+/// open the window (and hand out the token) to some other process on that port.
+/// The probe itself carries no secret.
+fn is_our_server(port: u16, pid: u32) -> bool {
+    let Ok(mut stream) = TcpStream::connect(("127.0.0.1", port)) else { return false };
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+    let req = format!(
+        "GET /api/launch-check HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
+    );
+    if stream.write_all(req.as_bytes()).is_err() {
+        return false;
+    }
+    let mut body = String::new();
+    let _ = stream.read_to_string(&mut body);
+    body.starts_with("HTTP/1.1 200") && body.contains(&format!("\"pid\":{pid}}}"))
 }
 
 /// GUI apps get a minimal PATH; take the user's login-shell PATH so the AI CLIs
@@ -43,17 +65,6 @@ fn login_path() -> String {
         .unwrap_or_else(|| std::env::var("PATH").unwrap_or_default())
 }
 
-fn wait_for_port(port: u16, timeout: Duration) -> bool {
-    let start = Instant::now();
-    while start.elapsed() < timeout {
-        if TcpStream::connect(("127.0.0.1", port)).is_ok() {
-            return true;
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    }
-    false
-}
-
 fn main() {
     let app = tauri::Builder::default()
         .setup(|app| {
@@ -66,30 +77,55 @@ fn main() {
             std::fs::create_dir_all(data_dir.join("sessions"))?;
             let log = std::fs::File::create(data_dir.join("server.log"))?;
 
-            let port = pick_port();
-            let child = Command::new(node)
-                .arg("server.js")
-                .current_dir(&server_dir)
-                .env("NODE_ENV", "production")
-                .env("PORT", port.to_string())
-                .env("HOSTNAME", "127.0.0.1")
-                .env("NEXT_TELEMETRY_DISABLED", "1")
-                .env("SESSIONS_DIR", data_dir.join("sessions"))
-                .env("PATH", login_path())
-                .stdout(log.try_clone()?)
-                .stderr(log)
-                .spawn()?;
-            app.manage(Server(Mutex::new(Some(child))));
-
-            if !wait_for_port(port, Duration::from_secs(30)) {
+            let token = random_token()?;
+            let path = login_path();
+            let mut started = None;
+            // Try the fixed port first; if something else holds it, Node exits with
+            // EADDRINUSE and we retry on a free port.
+            for port in [PREFERRED_PORT, free_port()] {
+                let mut child = Command::new(&node)
+                    .arg("server.js")
+                    .current_dir(&server_dir)
+                    .env("NODE_ENV", "production")
+                    .env("PORT", port.to_string())
+                    .env("HOSTNAME", "127.0.0.1")
+                    .env("NEXT_TELEMETRY_DISABLED", "1")
+                    .env("APP_TOKEN", &token)
+                    .env("SESSIONS_DIR", data_dir.join("sessions"))
+                    .env("PATH", &path)
+                    .stdin(Stdio::null())
+                    .stdout(log.try_clone()?)
+                    .stderr(log.try_clone()?)
+                    .spawn()?;
+                let deadline = Instant::now() + Duration::from_secs(30);
+                let mut ok = false;
+                while Instant::now() < deadline {
+                    if child.try_wait()?.is_some() {
+                        break;
+                    }
+                    if is_our_server(port, child.id()) {
+                        ok = true;
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+                if ok {
+                    started = Some((port, child));
+                    break;
+                }
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+            let Some((port, child)) = started else {
                 return Err(format!(
                     "Server did not start, see {}",
                     data_dir.join("server.log").display()
                 )
                 .into());
-            }
+            };
+            app.manage(Server(Mutex::new(Some(child))));
 
-            let url = format!("http://127.0.0.1:{port}").parse()?;
+            let url = format!("http://127.0.0.1:{port}/?launch={token}").parse()?;
             WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url))
                 .title("DB Admin Tool")
                 .inner_size(1440.0, 900.0)
