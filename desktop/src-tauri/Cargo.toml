@@ -8,6 +8,8 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+hmac = "0.12"
+sha2 = "0.10"
 
 [profile.release]
 codegen-units = 1

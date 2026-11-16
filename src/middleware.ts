@@ -4,8 +4,8 @@ import { NextRequest, NextResponse } from 'next/server';
 //  - Host must be loopback (blocks DNS rebinding)
 //  - cross-origin browser requests to /api are rejected (CSRF)
 //  - desktop app: APP_TOKEN is a per-launch secret from the Tauri shell. The window opens
-//    /?launch=<token>, which sets an httpOnly cookie; /api then requires that cookie or the
-//    X-App-Token header, so other local processes and web pages can't use the API.
+//    /?launch=<token>, which sets an httpOnly cookie; every other request then requires that
+//    cookie or the X-App-Token header, so other local processes and web pages can't use the app.
 const LOCAL = new Set(['localhost', '127.0.0.1', '[::1]']);
 const COOKIE = 'app_token';
 
@@ -51,11 +51,11 @@ export function middleware(request: NextRequest) {
     return res;
   }
 
-  // launch-check only returns the pid; the shell calls it without the token so the
-  // token is never sent to a process that merely squats on the port.
-  if (request.nextUrl.pathname.startsWith('/api/') && request.nextUrl.pathname !== '/api/launch-check') {
+  // Fail closed: with APP_TOKEN set, every path needs the token except the exact
+  // handshake endpoint (which reveals nothing without the token).
+  if (request.nextUrl.pathname !== '/api/launch-check') {
     const presented = request.cookies.get(COOKIE)?.value ?? request.headers.get('x-app-token');
-    if (presented !== token) return forbidden(request, 'api token');
+    if (presented !== token) return forbidden(request, 'token');
   }
   return NextResponse.next();
 }

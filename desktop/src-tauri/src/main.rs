@@ -8,6 +8,8 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
 use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
 
 /// Fixed port keeps the page origin stable, so localStorage (settings, history,
@@ -23,28 +25,31 @@ fn free_port() -> u16 {
         .unwrap_or(PREFERRED_PORT)
 }
 
-/// Per-launch secret shared with the server (APP_TOKEN) and the webview (cookie).
-fn random_token() -> std::io::Result<String> {
-    let mut buf = [0u8; 32];
+fn random_hex(bytes: usize) -> std::io::Result<String> {
+    let mut buf = vec![0u8; bytes];
     std::fs::File::open("/dev/urandom")?.read_exact(&mut buf)?;
     Ok(buf.iter().map(|b| format!("{b:02x}")).collect())
 }
 
-/// True once the server answers on `port` and reports our child's pid, so we never
-/// open the window (and hand out the token) to some other process on that port.
-/// The probe itself carries no secret.
-fn is_our_server(port: u16, pid: u32) -> bool {
+/// True once the server on `port` proves it knows the per-launch token by answering
+/// HMAC-SHA256(token, nonce) for a fresh nonce. A process squatting on the port can't,
+/// and the probe never sends the token itself.
+fn is_our_server(port: u16, token: &str) -> bool {
+    let Ok(nonce) = random_hex(16) else { return false };
     let Ok(mut stream) = TcpStream::connect(("127.0.0.1", port)) else { return false };
     let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
     let req = format!(
-        "GET /api/launch-check HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
+        "GET /api/launch-check?nonce={nonce} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
     );
     if stream.write_all(req.as_bytes()).is_err() {
         return false;
     }
     let mut body = String::new();
     let _ = stream.read_to_string(&mut body);
-    body.starts_with("HTTP/1.1 200") && body.contains(&format!("\"pid\":{pid}}}"))
+    let Ok(mut mac) = Hmac::<Sha256>::new_from_slice(token.as_bytes()) else { return false };
+    mac.update(nonce.as_bytes());
+    let expected: String = mac.finalize().into_bytes().iter().map(|b| format!("{b:02x}")).collect();
+    body.starts_with("HTTP/1.1 200") && body.contains(&format!("\"proof\":\"{expected}\""))
 }
 
 /// GUI apps get a minimal PATH; take the user's login-shell PATH so the AI CLIs
@@ -77,7 +82,7 @@ fn main() {
             std::fs::create_dir_all(data_dir.join("sessions"))?;
             let log = std::fs::File::create(data_dir.join("server.log"))?;
 
-            let token = random_token()?;
+            let token = random_hex(32)?;
             let path = login_path();
             let mut started = None;
             // Try the fixed port first; if something else holds it, Node exits with
@@ -103,7 +108,7 @@ fn main() {
                     if child.try_wait()?.is_some() {
                         break;
                     }
-                    if is_our_server(port, child.id()) {
+                    if is_our_server(port, &token) {
                         ok = true;
                         break;
                     }
