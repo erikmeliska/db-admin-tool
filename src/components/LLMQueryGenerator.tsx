@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { getLLMSettings, describeLLM } from '@/lib/llm/client-settings';
 import { TableSchema } from '@/types/database';
 import { queryHistoryManager } from '@/lib/query-history';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -110,12 +111,6 @@ export function LLMQueryGenerator({
       // console.log('Available table schemas:', Object.keys(tableSchemas));
       // console.log('Relevant schemas:', relevantSchemas);
 
-      // Get API key from localStorage
-      const apiKey = localStorage.getItem('google-api-key');
-      if (!apiKey) {
-        setError('Google API key not configured. Please set it in Settings.');
-        return;
-      }
 
       const response = await fetch('/api/llm', {
         method: 'POST',
@@ -124,7 +119,7 @@ export function LLMQueryGenerator({
           description,
           schema: relevantSchemas,
           databaseType: databaseType || 'mysql',
-          apiKey,
+          llm: getLLMSettings(),
         }),
       });
 
@@ -142,7 +137,7 @@ export function LLMQueryGenerator({
             generatedQuery: result.query,
             databaseType: databaseType,
             connectionName: connectionName,
-            model: 'gemini-2.0-flash-lite',
+            model: describeLLM(),
           });
         }
       } else {

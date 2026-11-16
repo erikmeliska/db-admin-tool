@@ -23,7 +23,15 @@ import {
     SelectTrigger, 
     SelectValue 
 } from "@/components/ui/select";
-import { Settings, Moon, Sun, Monitor, Trash2, Key, Database } from "lucide-react";
+import { Settings, Moon, Sun, Monitor, Trash2, Bot, Database } from "lucide-react";
+import { getLLMSettings, setLLMSettings, PROVIDER_LABELS } from "@/lib/llm/client-settings";
+import type { LLMProvider, LLMSelection } from "@/lib/llm/providers";
+
+const MODEL_HINTS: Record<LLMProvider, string> = {
+    claude: "e.g. sonnet, opus, haiku",
+    codex: "model id accepted by `codex -m`",
+    antigravity: "e.g. gemini-3.8-flash-medium (see `agy models`)",
+};
 
 interface SettingsDialogProps {
     onCleanupClick: () => void;
@@ -32,36 +40,27 @@ interface SettingsDialogProps {
 
 export function SettingsDialog({ onCleanupClick, getStorageSize }: SettingsDialogProps) {
     const { theme, setTheme } = useTheme();
-    const [googleApiKey, setGoogleApiKey] = useState("");
-    const [isApiKeyVisible, setIsApiKeyVisible] = useState(false);
+    const [llm, setLlm] = useState<LLMSelection>({ provider: "claude" });
+    const [cliStatus, setCliStatus] = useState<{ ok: boolean; providers?: Record<string, boolean>; error?: string } | null>(null);
     const [storageSize, setStorageSize] = useState(0);
 
-    // Load Google API key from localStorage on mount
     useEffect(() => {
-        const savedApiKey = localStorage.getItem("google-api-key");
-        if (savedApiKey) {
-            setGoogleApiKey(savedApiKey);
-        }
+        setLlm(getLLMSettings());
         setStorageSize(getStorageSize());
+        fetch("/api/llm")
+            .then((r) => r.json())
+            .then(setCliStatus)
+            .catch((e) => setCliStatus({ ok: false, error: String(e) }));
     }, [getStorageSize]);
 
-    const handleApiKeyChange = (value: string) => {
-        setGoogleApiKey(value);
-        if (value.trim()) {
-            localStorage.setItem("google-api-key", value.trim());
-        } else {
-            localStorage.removeItem("google-api-key");
-        }
+    const updateLlm = (next: LLMSelection) => {
+        setLlm(next);
+        setLLMSettings(next);
     };
 
     const handleCleanup = () => {
         onCleanupClick();
         setStorageSize(getStorageSize());
-    };
-
-    const maskApiKey = (key: string) => {
-        if (!key || key.length < 8) return key;
-        return key.slice(0, 4) + "•".repeat(key.length - 8) + key.slice(-4);
     };
 
     const formatStorageSize = (bytes: number) => {
@@ -89,62 +88,61 @@ export function SettingsDialog({ onCleanupClick, getStorageSize }: SettingsDialo
                         <span>Settings</span>
                     </DialogTitle>
                     <DialogDescription>
-                        Configure your Database Admin Tool preferences and API settings.
+                        Configure your Database Admin Tool preferences and AI provider.
                     </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-6">
-                    {/* API Configuration */}
+                    {/* AI provider */}
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center space-x-2 text-lg">
-                                <Key className="w-4 h-4" />
-                                <span>API Configuration</span>
+                                <Bot className="w-4 h-4" />
+                                <span>AI Provider</span>
                             </CardTitle>
                             <CardDescription>
-                                Configure your Google AI API key for AI-powered query generation.
+                                AI features run through your local, logged-in CLI. No API key needed.
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="space-y-2">
-                                <Label htmlFor="google-api-key">Google AI API Key</Label>
-                                <div className="flex space-x-2">
-                                    <Input
-                                        id="google-api-key"
-                                        type={isApiKeyVisible ? "text" : "password"}
-                                        placeholder="Enter your Google AI API key..."
-                                        value={googleApiKey}
-                                        onChange={(e) => handleApiKeyChange(e.target.value)}
-                                        className="flex-1"
-                                    />
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => setIsApiKeyVisible(!isApiKeyVisible)}
-                                        className="px-3"
-                                    >
-                                        {isApiKeyVisible ? "Hide" : "Show"}
-                                    </Button>
-                                </div>
-                                {googleApiKey && (
-                                    <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                                        <Badge variant="outline" className="text-xs">
-                                            Configured
-                                        </Badge>
-                                        <span>Key: {maskApiKey(googleApiKey)}</span>
-                                    </div>
-                                )}
-                                <p className="text-xs text-muted-foreground">
-                                    Get your API key from{" "}
-                                    <a 
-                                        href="https://ai.google.dev/" 
-                                        target="_blank" 
-                                        rel="noopener noreferrer"
-                                        className="text-primary hover:underline"
-                                    >
-                                        Google AI Studio
-                                    </a>
-                                </p>
+                                <Label htmlFor="llm-provider">CLI</Label>
+                                <Select
+                                    value={llm.provider}
+                                    onValueChange={(provider) => updateLlm({ provider: provider as LLMProvider, model: undefined })}
+                                >
+                                    <SelectTrigger id="llm-provider">
+                                        <SelectValue placeholder="Select CLI" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {(Object.keys(PROVIDER_LABELS) as LLMProvider[]).map((p) => (
+                                            <SelectItem key={p} value={p}>
+                                                <div className="flex items-center space-x-2">
+                                                    <span>{PROVIDER_LABELS[p]}</span>
+                                                    {cliStatus?.providers && !cliStatus.providers[p] && (
+                                                        <Badge variant="outline" className="text-xs">not installed</Badge>
+                                                    )}
+                                                </div>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="llm-model">Model (optional)</Label>
+                                <Input
+                                    id="llm-model"
+                                    placeholder={MODEL_HINTS[llm.provider ?? "claude"]}
+                                    value={llm.model ?? ""}
+                                    onChange={(e) => updateLlm({ ...llm, model: e.target.value })}
+                                />
+                                <p className="text-xs text-muted-foreground">Empty = the CLI&apos;s default model.</p>
+                            </div>
+                            <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                                <Badge variant={cliStatus === null || cliStatus.providers?.[llm.provider ?? "claude"] ? "secondary" : "destructive"} className="text-xs">
+                                    {cliStatus === null ? "checking…" : cliStatus.providers?.[llm.provider ?? "claude"] ? "CLI found" : "CLI not found"}
+                                </Badge>
+                                {cliStatus?.providers && !cliStatus.providers[llm.provider ?? "claude"] && <span className="text-xs">Install it and log in, then reopen Settings.</span>}
                             </div>
                         </CardContent>
                     </Card>

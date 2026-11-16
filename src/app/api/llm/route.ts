@@ -1,219 +1,71 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateSQLQuery } from '@/lib/llm/query-generator';
-import { DatabaseType, TableSchema } from '@/types/database';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { runLLMAction, LLMAction, LLMRequest } from '@/lib/llm/query-generator';
+import { providersAvailable } from '@/lib/llm/cli';
+import type { LLMSelection } from '@/lib/llm/providers';
 
-const MODEL = "gemini-2.0-flash-lite";
+const ACTIONS: LLMAction[] = ['generate', 'explain', 'fix', 'modify', 'ask'];
+
+// Which local AI CLIs are installed (used by Settings).
+export async function GET() {
+  return NextResponse.json(providersAvailable());
+}
+
+// The route runs CLIs on the host, so only accept JSON from the app itself on loopback.
+// Host allowlist blocks DNS rebinding; JSON content type forces a CORS preflight cross-site.
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+function isLocalHost(host: string | null): boolean {
+  if (!host) return false;
+  try {
+    return LOCAL_HOSTNAMES.has(new URL(`http://${host}`).hostname);
+  } catch {
+    return false;
+  }
+}
+
+function isSameOriginJson(request: NextRequest): boolean {
+  if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) return false;
+  const host = request.headers.get('host');
+  if (!isLocalHost(host)) return false;
+  const origin = request.headers.get('origin');
+  if (!origin) return true; // non-browser client (curl), not a CSRF vector
+  try {
+    const o = new URL(origin);
+    return LOCAL_HOSTNAMES.has(o.hostname) && o.host === host;
+  } catch {
+    return false;
+  }
+}
 
 export async function POST(request: NextRequest) {
+  if (!isSameOriginJson(request)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
   try {
     const body = await request.json();
-    const { 
-      description, 
-      schema, 
-      databaseType,
-      action = 'generate', // Default to generate for backward compatibility
-      query, // For explain/fix/modify/ask actions
-      apiKey // Google API key from client
-    }: { 
-      description: string; 
-      schema: TableSchema[]; 
-      databaseType: DatabaseType;
-      action?: 'generate' | 'explain' | 'fix' | 'modify' | 'ask';
-      query?: string;
-      apiKey?: string;
-    } = body;
-    
+    const { action = 'generate', description, databaseType, schema, query, llm } = body as Partial<LLMRequest> & {
+      llm?: LLMSelection;
+    };
+
     if (!description || !databaseType) {
-      return NextResponse.json(
-        { error: 'Description and database type are required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Description and database type are required' }, { status: 400 });
+    }
+    if (!ACTIONS.includes(action)) {
+      return NextResponse.json({ error: `Invalid action. Must be one of: ${ACTIONS.join(', ')}` }, { status: 400 });
+    }
+    if (action === 'generate' && !schema) {
+      return NextResponse.json({ error: 'Schema is required for query generation' }, { status: 400 });
+    }
+    if (action !== 'generate' && !query) {
+      return NextResponse.json({ error: `Query is required for action "${action}"` }, { status: 400 });
     }
 
-    // Use provided API key or fallback to environment variable
-    const googleApiKey = apiKey || process.env.GOOGLE_API_KEY;
-    if (!googleApiKey) {
-      return NextResponse.json(
-        { error: 'Google API key not provided. Please configure it in Settings.' },
-        { status: 400 }
-      );
-    }
-
-    const genAI = new GoogleGenerativeAI(googleApiKey);
-    const model = genAI.getGenerativeModel({ 
-      model: MODEL,
-      generationConfig: {
-        temperature: action === 'explain' ? 0.3 : 0, // Slightly more creative for explanations
-        maxOutputTokens: action === 'explain' ? 1000 : 800,
-      },
-    });
-
-    let result: string;
-    let responseData: { query?: string; explanation?: string };
-
-    switch (action) {
-      case 'generate':
-        if (!schema) {
-          return NextResponse.json(
-            { error: 'Schema is required for query generation' },
-            { status: 400 }
-          );
-        }
-        result = await generateSQLQuery(description, schema, databaseType);
-        responseData = { 
-          query: result,
-          explanation: `Generated ${databaseType} query based on: "${description}"`,
-        };
-        break;
-
-      case 'explain':
-        if (!query) {
-          return NextResponse.json(
-            { error: 'Query is required for explanation' },
-            { status: 400 }
-          );
-        }
-        
-        const schemaContext = schema && schema.length > 0 
-          ? schema.map(table => 
-              `Table: ${table.name}\nColumns: ${table.columns.map((col: { name: string; type: string }) => `${col.name} (${col.type})`).join(', ')}`
-            ).join('\n\n')
-          : 'No schema information available';
-
-        const explainPrompt = `You are an expert SQL analyst. Please explain this ${databaseType} query in simple, clear terms.
-
-${schemaContext ? `Database Schema Context:\n${schemaContext}\n` : ''}
-SQL Query:
-${query}
-
-Please provide a clear explanation that covers:
-1. What data this query retrieves or modifies
-2. Which tables and columns are involved
-3. How the JOINs work (if any)
-4. Any filtering conditions or grouping
-5. The overall business purpose
-
-Explain in plain English that a non-technical person could understand.`;
-
-        const explainResponse = await model.generateContent(explainPrompt);
-        result = (await explainResponse.response).text().trim();
-        responseData = { explanation: result };
-        break;
-
-      case 'fix':
-        if (!query) {
-          return NextResponse.json(
-            { error: 'Query is required for fixing' },
-            { status: 400 }
-          );
-        }
-
-        const fixSchemaContext = schema && schema.length > 0 
-          ? schema.map(table => 
-              `Table: ${table.name}\nColumns: ${table.columns.map((col: { name: string; type: string }) => `${col.name} (${col.type})`).join(', ')}`
-            ).join('\n\n')
-          : '';
-
-        const fixPrompt = `You are an expert SQL developer. Please analyze and fix any issues in this ${databaseType} query.
-
-${fixSchemaContext ? `Available Schema:\n${fixSchemaContext}\n` : ''}
-Current Query:
-${query}
-
-Instructions:
-${description}
-
-Please identify and fix:
-- Syntax errors
-- Incorrect table or column names
-- JOIN issues
-- Logic errors
-- Performance problems
-
-Return ONLY the corrected SQL query, no explanations.`;
-
-        const fixResponse = await model.generateContent(fixPrompt);
-        result = (await fixResponse.response).text().trim()
-          .replace(/^```sql\s*/i, '')
-          .replace(/\s*```$/, '');
-        responseData = { query: result };
-        break;
-
-      case 'modify':
-        if (!query) {
-          return NextResponse.json(
-            { error: 'Query is required for modification' },
-            { status: 400 }
-          );
-        }
-
-        const modifySchemaContext = schema && schema.length > 0 
-          ? schema.map(table => 
-              `Table: ${table.name}\nColumns: ${table.columns.map((col: { name: string; type: string }) => `${col.name} (${col.type})`).join(', ')}`
-            ).join('\n\n')
-          : '';
-
-        const modifyPrompt = `You are an expert SQL developer. Please modify this ${databaseType} query based on the user's request.
-
-${modifySchemaContext ? `Available Schema:\n${modifySchemaContext}\n` : ''}
-Current Query:
-${query}
-
-Modification Request:
-${description}
-
-Please return the modified SQL query that implements the requested changes. Return ONLY the SQL query, no explanations.`;
-
-        const modifyResponse = await model.generateContent(modifyPrompt);
-        result = (await modifyResponse.response).text().trim()
-          .replace(/^```sql\s*/i, '')
-          .replace(/\s*```$/, '');
-        responseData = { query: result };
-        break;
-
-      case 'ask':
-        if (!query) {
-          return NextResponse.json(
-            { error: 'Query is required for asking questions' },
-            { status: 400 }
-          );
-        }
-
-        const askSchemaContext = schema && schema.length > 0 
-          ? schema.map(table => 
-              `Table: ${table.name}\nColumns: ${table.columns.map((col: { name: string; type: string }) => `${col.name} (${col.type})`).join(', ')}`
-            ).join('\n\n')
-          : '';
-
-        const askPrompt = `You are an expert SQL analyst. Please answer the user's question about this ${databaseType} query.
-
-${askSchemaContext ? `Available Schema:\n${askSchemaContext}\n` : ''}
-SQL Query:
-${query}
-
-User's Question:
-${description}
-
-Please provide a detailed, helpful answer about the query. Use markdown formatting for better readability.`;
-
-        const askResponse = await model.generateContent(askPrompt);
-        result = (await askResponse.response).text().trim();
-        responseData = { explanation: result };
-        break;
-
-      default:
-        return NextResponse.json(
-          { error: 'Invalid action. Must be: generate, explain, fix, modify, or ask' },
-          { status: 400 }
-        );
-    }
-    
-    return NextResponse.json(responseData);
+    const result = await runLLMAction({ action, description, databaseType, schema, query }, llm);
+    return NextResponse.json(result);
   } catch (error) {
     return NextResponse.json(
-      { error: `Operation failed: ${error}` },
+      { error: `Operation failed: ${error instanceof Error ? error.message : error}` },
       { status: 500 }
     );
   }
-} 
+}

@@ -49,3 +49,5 @@ next-env.d.ts
 # encrypted session files and keys
 /sessions/
 .encryption-key
+
+.playwright-mcp/

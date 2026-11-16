@@ -20,8 +20,8 @@ class SessionManager {
     metadata?: Record<string, TableMetadata>;
   }>();
   
-  private readonly sessionsDir = path.join(process.cwd(), 'sessions');
-  private readonly encryptionKeyFile = path.join(process.cwd(), 'sessions', '.encryption-key');
+  private readonly sessionsDir = process.env.SESSIONS_DIR || path.join(process.cwd(), 'sessions');
+  private readonly encryptionKeyFile = path.join(this.sessionsDir, '.encryption-key');
   private encryptionKey: string = '';
   private initializationPromise: Promise<void>;
   private isInitialized = false;

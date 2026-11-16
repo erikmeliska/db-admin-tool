@@ -1,5 +1,6 @@
 import { ConnectionConfig, QueryResult, TableSchema, ColumnInfo, TableMetadata } from '@/types/database';
 import { DatabaseConnection } from './types';
+import { loadLocalSecrets } from '@/lib/local-secrets';
 
 export class MySQLProxyConnection implements DatabaseConnection {
   private config: ConnectionConfig;
@@ -29,12 +30,26 @@ export class MySQLProxyConnection implements DatabaseConnection {
       [key: string]: unknown;
     };
   }> {
-    if (!this.config.host || !this.config.username || !this.config.password || !this.config.server) {
-      throw new Error('MySQL proxy requires host, username, password, and server');
+    // Env creds (IM_DB_PROXY_URL + IM_DB_PROXY_AUTH) are used only as a pair, so the
+    // server-side Authorization header is never sent to a URL entered in the form.
+    loadLocalSecrets();
+    const useEnv = !this.config.host;
+    const url = useEnv ? process.env.IM_DB_PROXY_URL : this.config.host;
+    const authHeader = useEnv
+      ? process.env.IM_DB_PROXY_AUTH
+      : this.config.username && this.config.password
+        ? `Basic ${Buffer.from(`${this.config.username}:${this.config.password}`).toString('base64')}`
+        : undefined;
+
+    // InteliMail convention: the proxy server id is the first two characters of the DB name.
+    const server = this.config.server || this.config.database?.slice(0, 2);
+
+    if (!url || !authHeader || !server) {
+      throw new Error(
+        'MySQL proxy requires a database/server plus a proxy URL and credentials (in the form or via IM_DB_PROXY_URL / IM_DB_PROXY_AUTH)'
+      );
     }
 
-    const authHeader = `Basic ${Buffer.from(`${this.config.username}:${this.config.password}`).toString('base64')}`;
-    
     const options = {
       method: 'POST',
       headers: {
@@ -42,18 +57,18 @@ export class MySQLProxyConnection implements DatabaseConnection {
         'Authorization': authHeader
       },
       body: JSON.stringify({
-        server: this.config.server,
+        server,
         db: this.config.database,
         query,
         params: params || []
       })
     };
 
-    const response = await fetch(this.config.host, options);
+    const response = await fetch(url, options);
 
     if (!response.ok) {
-      console.error(response);
-      throw new Error('Failed to connect to database proxy');
+      const detail = await response.text().catch(() => '');
+      throw new Error(`Database proxy returned ${response.status}${detail ? `: ${detail.slice(0, 300)}` : ''}`);
     }
 
     const data = await response.json();

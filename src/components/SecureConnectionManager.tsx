@@ -83,8 +83,15 @@ export function SecureConnectionManager({ onSessionSelect, selectedSession }: Se
     }
   };
 
+  // Server may provide proxy URL + auth from env (IM_DB_PROXY_URL / IM_DB_PROXY_AUTH)
+  const [proxyFromEnv, setProxyFromEnv] = useState(false);
+
   useEffect(() => {
     loadSessions();
+    fetch('/api/config')
+      .then(r => r.json())
+      .then(c => setProxyFromEnv(Boolean(c.proxyFromEnv)))
+      .catch(() => setProxyFromEnv(false));
   }, []);
 
   const loadSessions = async () => {
@@ -115,8 +122,8 @@ export function SecureConnectionManager({ onSessionSelect, selectedSession }: Se
 
     // Additional validation for MySQL proxy
     if (formData.type === 'mysql-proxy') {
-      if (!formData.host || !formData.server || !formData.username || !formData.password) {
-        alert('MySQL Proxy requires Proxy URL, MySQL Server, Username, and Password');
+      if (!proxyFromEnv && (!formData.host || !formData.username || !formData.password)) {
+        alert('MySQL Proxy requires Proxy URL, Username, and Password (or IM_DB_PROXY_URL / IM_DB_PROXY_AUTH on the server)');
         return;
       }
     }
@@ -316,7 +323,9 @@ export function SecureConnectionManager({ onSessionSelect, selectedSession }: Se
                       setFormData(prev => ({ 
                         ...prev, 
                         type: value,
-                        port: defaultPort 
+                        port: defaultPort,
+                        // Empty host = use IM_DB_PROXY_URL from the server env
+                        host: value === 'mysql-proxy' ? (proxyFromEnv ? '' : prev.host) : (prev.host || 'localhost'),
                       }));
                     }}
                   >
@@ -346,21 +355,26 @@ export function SecureConnectionManager({ onSessionSelect, selectedSession }: Se
               ) : formData.type === 'mysql-proxy' ? (
                 <>
                   <div>
-                    <Label htmlFor="host">Proxy URL</Label>
+                    <Label htmlFor="host">Proxy URL{proxyFromEnv && ' (optional)'}</Label>
                     <Input
                       id="host"
                       value={formData.host || ''}
                       onChange={(e) => setFormData(prev => ({ ...prev, host: e.target.value }))}
-                      placeholder="https://your-proxy-api.com/query"
+                      placeholder={proxyFromEnv ? 'from IM_DB_PROXY_URL' : 'https://your-proxy-api.com/query'}
                     />
+                    {proxyFromEnv && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Leave URL, username and password empty to use IM_DB_PROXY_URL / IM_DB_PROXY_AUTH from the server.
+                      </p>
+                    )}
                   </div>
                   <div>
-                    <Label htmlFor="server">MySQL Server</Label>
+                    <Label htmlFor="server">MySQL Server (optional)</Label>
                     <Input
                       id="server"
                       value={formData.server || ''}
                       onChange={(e) => setFormData(prev => ({ ...prev, server: e.target.value }))}
-                      placeholder="mysql-server-name"
+                      placeholder="default: first 2 chars of the database name"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -381,7 +395,7 @@ export function SecureConnectionManager({ onSessionSelect, selectedSession }: Se
                         id="username"
                         value={formData.username || ''}
                         onChange={(e) => setFormData(prev => ({ ...prev, username: e.target.value }))}
-                        placeholder="username"
+                        placeholder={proxyFromEnv ? 'from IM_DB_PROXY_AUTH' : 'username'}
                       />
                     </div>
                     <div>
@@ -391,7 +405,7 @@ export function SecureConnectionManager({ onSessionSelect, selectedSession }: Se
                         type="password"
                         value={formData.password || ''}
                         onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                        placeholder="password"
+                        placeholder={proxyFromEnv ? 'from IM_DB_PROXY_AUTH' : 'password'}
                       />
                     </div>
                   </div>
