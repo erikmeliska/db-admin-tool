@@ -9,14 +9,28 @@ export async function GET() {
   return NextResponse.json(await bridgeHealth());
 }
 
-// The route runs CLIs on the host, so only accept same-origin JSON requests:
-// a cross-site page can't send application/json without a CORS preflight.
+// The route runs CLIs on the host, so only accept JSON from the app itself on loopback.
+// Host allowlist blocks DNS rebinding; JSON content type forces a CORS preflight cross-site.
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+function isLocalHost(host: string | null): boolean {
+  if (!host) return false;
+  try {
+    return LOCAL_HOSTNAMES.has(new URL(`http://${host}`).hostname);
+  } catch {
+    return false;
+  }
+}
+
 function isSameOriginJson(request: NextRequest): boolean {
   if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) return false;
+  const host = request.headers.get('host');
+  if (!isLocalHost(host)) return false;
   const origin = request.headers.get('origin');
   if (!origin) return true; // non-browser client (curl), not a CSRF vector
   try {
-    return new URL(origin).host === request.headers.get('host');
+    const o = new URL(origin);
+    return LOCAL_HOSTNAMES.has(o.hostname) && o.host === host;
   } catch {
     return false;
   }
