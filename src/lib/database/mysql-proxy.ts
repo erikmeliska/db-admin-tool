@@ -29,13 +29,15 @@ export class MySQLProxyConnection implements DatabaseConnection {
       [key: string]: unknown;
     };
   }> {
-    // Explicit connection values win; otherwise fall back to the proxy creds
-    // from the server environment (IM_DB_PROXY_URL / IM_DB_PROXY_AUTH).
-    const url = this.config.host || process.env.IM_DB_PROXY_URL;
-    const authHeader =
-      this.config.username && this.config.password
+    // Env creds (IM_DB_PROXY_URL + IM_DB_PROXY_AUTH) are used only as a pair, so the
+    // server-side Authorization header is never sent to a URL entered in the form.
+    const useEnv = !this.config.host;
+    const url = useEnv ? process.env.IM_DB_PROXY_URL : this.config.host;
+    const authHeader = useEnv
+      ? process.env.IM_DB_PROXY_AUTH
+      : this.config.username && this.config.password
         ? `Basic ${Buffer.from(`${this.config.username}:${this.config.password}`).toString('base64')}`
-        : process.env.IM_DB_PROXY_AUTH;
+        : undefined;
 
     // InteliMail convention: the proxy server id is the first two characters of the DB name.
     const server = this.config.server || this.config.database?.slice(0, 2);

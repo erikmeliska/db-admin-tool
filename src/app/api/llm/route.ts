@@ -9,7 +9,23 @@ export async function GET() {
   return NextResponse.json(await bridgeHealth());
 }
 
+// The route runs CLIs on the host, so only accept same-origin JSON requests:
+// a cross-site page can't send application/json without a CORS preflight.
+function isSameOriginJson(request: NextRequest): boolean {
+  if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) return false;
+  const origin = request.headers.get('origin');
+  if (!origin) return true; // non-browser client (curl), not a CSRF vector
+  try {
+    return new URL(origin).host === request.headers.get('host');
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(request: NextRequest) {
+  if (!isSameOriginJson(request)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
   try {
     const body = await request.json();
     const { action = 'generate', description, databaseType, schema, query, llm } = body as Partial<LLMRequest> & {

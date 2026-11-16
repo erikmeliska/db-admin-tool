@@ -70,8 +70,10 @@ function buildCommand(provider, prompt, model, workdir) {
       return {
         bin: BINS.antigravity,
         args: [
-          '-p', prompt, '--output-format', 'text', '--print-timeout', `${Math.floor(TIMEOUT_MS / 1000)}s`,
+          '--sandbox', '--disable-slash-commands', '--output-format', 'text',
+          '--print-timeout', `${Math.floor(TIMEOUT_MS / 1000)}s`,
           ...(model ? ['--model', model] : []),
+          '-p', prompt,
         ],
         stdin: '',
       };
@@ -80,8 +82,18 @@ function buildCommand(provider, prompt, model, workdir) {
   }
 }
 
+const MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:\/-]{0,79}$/;
+
+// Children get only what the CLIs need to find their login, not the bridge's env.
+const CHILD_ENV = Object.fromEntries(
+  ['PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'LANG', 'LC_ALL', 'TMPDIR', 'TERM']
+    .filter((k) => process.env[k] !== undefined)
+    .map((k) => [k, process.env[k]])
+);
+
 function run(provider, prompt, model) {
   return new Promise((resolve, reject) => {
+    if (model && !MODEL_RE.test(model)) return reject(new Error(`Invalid model name: ${model}`));
     const workdir = mkdtempSync(join(tmpdir(), 'llm-bridge-'));
     const cleanup = () => rmSync(workdir, { recursive: true, force: true });
     let cmd;
@@ -96,7 +108,7 @@ function run(provider, prompt, model) {
       return reject(new Error(`CLI for provider "${provider}" not found on host`));
     }
 
-    const child = spawn(cmd.bin, cmd.args, { cwd: workdir, env: process.env, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(cmd.bin, cmd.args, { cwd: workdir, env: CHILD_ENV, stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     const timer = setTimeout(() => child.kill('SIGTERM'), TIMEOUT_MS);
