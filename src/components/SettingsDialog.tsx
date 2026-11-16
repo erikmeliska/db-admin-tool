@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Settings, Moon, Sun, Monitor, Trash2, Bot, Database } from "lucide-react";
 import { getLLMSettings, setLLMSettings, PROVIDER_LABELS } from "@/lib/llm/client-settings";
-import type { LLMProvider, LLMSelection } from "@/lib/llm/bridge";
+import type { LLMProvider, LLMSelection } from "@/lib/llm/providers";
 
 const MODEL_HINTS: Record<LLMProvider, string> = {
     claude: "e.g. sonnet, opus, haiku",
@@ -41,7 +41,7 @@ interface SettingsDialogProps {
 export function SettingsDialog({ onCleanupClick, getStorageSize }: SettingsDialogProps) {
     const { theme, setTheme } = useTheme();
     const [llm, setLlm] = useState<LLMSelection>({ provider: "claude" });
-    const [bridge, setBridge] = useState<{ ok: boolean; providers?: Record<string, boolean>; error?: string } | null>(null);
+    const [cliStatus, setCliStatus] = useState<{ ok: boolean; providers?: Record<string, boolean>; error?: string } | null>(null);
     const [storageSize, setStorageSize] = useState(0);
 
     useEffect(() => {
@@ -49,8 +49,8 @@ export function SettingsDialog({ onCleanupClick, getStorageSize }: SettingsDialo
         setStorageSize(getStorageSize());
         fetch("/api/llm")
             .then((r) => r.json())
-            .then(setBridge)
-            .catch((e) => setBridge({ ok: false, error: String(e) }));
+            .then(setCliStatus)
+            .catch((e) => setCliStatus({ ok: false, error: String(e) }));
     }, [getStorageSize]);
 
     const updateLlm = (next: LLMSelection) => {
@@ -101,7 +101,7 @@ export function SettingsDialog({ onCleanupClick, getStorageSize }: SettingsDialo
                                 <span>AI Provider</span>
                             </CardTitle>
                             <CardDescription>
-                                AI features run through your local, logged-in CLI via the host LLM bridge. No API key needed.
+                                AI features run through your local, logged-in CLI. No API key needed.
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
@@ -119,7 +119,7 @@ export function SettingsDialog({ onCleanupClick, getStorageSize }: SettingsDialo
                                             <SelectItem key={p} value={p}>
                                                 <div className="flex items-center space-x-2">
                                                     <span>{PROVIDER_LABELS[p]}</span>
-                                                    {bridge?.providers && !bridge.providers[p] && (
+                                                    {cliStatus?.providers && !cliStatus.providers[p] && (
                                                         <Badge variant="outline" className="text-xs">not installed</Badge>
                                                     )}
                                                 </div>
@@ -139,10 +139,10 @@ export function SettingsDialog({ onCleanupClick, getStorageSize }: SettingsDialo
                                 <p className="text-xs text-muted-foreground">Empty = the CLI&apos;s default model.</p>
                             </div>
                             <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                                <Badge variant={bridge?.ok ? "secondary" : "destructive"} className="text-xs">
-                                    {bridge === null ? "checking…" : bridge.ok ? "bridge online" : "bridge offline"}
+                                <Badge variant={cliStatus === null || cliStatus.providers?.[llm.provider ?? "claude"] ? "secondary" : "destructive"} className="text-xs">
+                                    {cliStatus === null ? "checking…" : cliStatus.providers?.[llm.provider ?? "claude"] ? "CLI found" : "CLI not found"}
                                 </Badge>
-                                {bridge && !bridge.ok && <span className="text-xs">Start it with ./scripts/local-up.sh</span>}
+                                {cliStatus?.providers && !cliStatus.providers[llm.provider ?? "claude"] && <span className="text-xs">Install it and log in, then reopen Settings.</span>}
                             </div>
                         </CardContent>
                     </Card>

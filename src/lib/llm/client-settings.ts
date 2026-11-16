@@ -1,5 +1,5 @@
 // Browser-side LLM selection, stored in localStorage and sent with every /api/llm call.
-import type { LLMProvider, LLMSelection } from './bridge';
+import type { LLMProvider, LLMSelection } from './providers';
 
 const PROVIDER_KEY = 'llm-provider';
 const MODEL_KEY = 'llm-model';

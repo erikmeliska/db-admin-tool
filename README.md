@@ -27,7 +27,7 @@ A modern, AI-powered database administration tool built with Next.js, featuring 
 - **Case-sensitive table names** - Proper quoting for all database types
 
 ### 🤖 **AI-Powered Query Generation**
-- **Local AI CLIs** (Claude Code, Codex, Antigravity) via a host bridge
+- **Local AI CLIs** (Claude Code, Codex, Antigravity), no API key
 - Natural language to SQL conversion
 - Schema-aware query generation
 - Context-sensitive table and column suggestions
@@ -73,7 +73,7 @@ A modern, AI-powered database administration tool built with Next.js, featuring 
 
 ### ⚙️ **Centralized Settings Management**
 - **Settings Dialog** - Unified configuration via cog wheel icon (⚙️)
-- **AI Provider** - pick the local CLI and model, with bridge status
+- **AI Provider** - pick the local CLI and model, shows whether it is installed
 - **Theme Management** - Dark/Light/System theme selection with real-time preview
 - **Storage Management** - View usage and cleanup old session data
 - **About Information** - Version and build details
@@ -102,22 +102,23 @@ A modern, AI-powered database administration tool built with Next.js, featuring 
 
 ## 🚀 Quick Start
 
-### Local container with your AI CLIs (recommended)
+### Desktop app (recommended, macOS)
 
 ```bash
-./scripts/local-up.sh     # loads IM_DB_PROXY_URL / IM_DB_PROXY_AUTH from ~/.secrets,
-                          # starts the host LLM bridge, builds + runs the container
-open http://127.0.0.1:8008
-./scripts/local-down.sh   # stops the container and the bridge
+./scripts/build-desktop.sh --install   # builds DB Admin Tool.app (+ .dmg) and copies it to /Applications
 ```
 
-- **AI** runs through the logged-in CLIs on the host: `claude` (Claude Code), `codex` or `agy` (Antigravity).
-  `llm-bridge/server.mjs` (no deps, `127.0.0.1:8787`, bearer token in `.llm-bridge-token`) spawns them
-  without tools in an empty temp dir; the container reaches it via `host.docker.internal`.
-  Pick the CLI and optional model in ⚙️ Settings → AI Provider.
-- **MySQL proxy**: with `IM_DB_PROXY_URL` + `IM_DB_PROXY_AUTH` (full `Authorization` header value) in the env,
-  leave proxy URL, username and password empty in the connection form. MySQL Server defaults to the first
-  two characters of the database name.
+Requires Node 20+, Rust (`brew install rust`) and Xcode CLT to build. The app itself is self-contained:
+a Tauri shell (system WebKit window, ~3 MB) starts the bundled Node runtime with the Next.js server on
+`127.0.0.1:18008`. Quitting the app stops the server. Data and log: `~/Library/Application Support/sk.trisoft.dbadmintool/`.
+Output: `desktop/src-tauri/target/release/bundle/{macos,dmg}/` (≈170 MB app, ≈53 MB dmg).
+
+- **AI** runs your logged-in CLIs directly: `claude` (Claude Code), `codex` or `agy` (Antigravity), without tools,
+  in an empty temp dir. Pick the CLI and optional model in ⚙️ Settings → AI Provider.
+- **MySQL proxy**: `IM_DB_PROXY_URL` + `IM_DB_PROXY_AUTH` (full `Authorization` header value) are read from
+  `~/.secrets` (or `$SECRETS_FILE`). Leave proxy URL, username and password empty in the connection form.
+  MySQL Server defaults to the first two characters of the database name.
+- The build is ad-hoc signed (local use). For other Macs it needs an Apple Developer ID + notarization.
 
 ### Option 1: Pre-built Docker (Fastest) ⚡
 
@@ -261,11 +262,11 @@ The CI/CD pipeline ensures:
 
 ### API Configuration
 
-**AI provider**: no API key. Choose Claude Code / Codex / Antigravity CLI in the Settings dialog (⚙️); requests go through the host LLM bridge (`LLM_BRIDGE_URL`, `LLM_BRIDGE_TOKEN`, see `.env.example`).
+**AI provider**: no API key. Choose Claude Code / Codex / Antigravity CLI in the Settings dialog (⚙️); the server runs the local CLI directly (in Docker no CLI is available, so AI is off there).
 
 **Session Encryption**: The application automatically generates a secure encryption key on first run to protect stored database credentials. The key is saved to `sessions/.encryption-key` and should be backed up for data recovery.
 
-Optional env: `IM_DB_PROXY_URL` / `IM_DB_PROXY_AUTH` (MySQL proxy creds), `LLM_BRIDGE_*` (AI), see `.env.example`.
+Optional env: `IM_DB_PROXY_URL` / `IM_DB_PROXY_AUTH` (MySQL proxy creds), `LLM_DEFAULT_PROVIDER`, `SESSIONS_DIR`, see `.env.example`.
 
 ### Secure Database Connections
 
@@ -401,7 +402,7 @@ This application implements **enterprise-grade security**:
 
 **v2.3.0 - Centralized Settings & Enhanced UX**
 - ✅ Centralized Settings dialog with cog wheel icon (⚙️) access
-- ✅ Local AI CLIs via host bridge, no API key
+- ✅ Local AI CLIs, no API key
 - ✅ Integrated theme management (Light/Dark/System) with instant switching
 - ✅ Storage management with usage display and cleanup functionality
 - ✅ Clean header design with consolidated controls

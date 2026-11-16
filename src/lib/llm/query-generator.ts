@@ -1,5 +1,6 @@
 import { DatabaseType, TableSchema, ColumnInfo } from '@/types/database';
-import { complete, stripCodeFence, LLMSelection } from './bridge';
+import { complete, stripCodeFence } from './cli';
+import type { LLMSelection } from './providers';
 
 // Clients send schemas in two shapes: TableSchema ({ name, columns: [] }) from the
 // generator, and { tableName, columns: TableSchema } from the editor. Accept both.

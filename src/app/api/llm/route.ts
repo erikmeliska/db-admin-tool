@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runLLMAction, LLMAction, LLMRequest } from '@/lib/llm/query-generator';
-import { bridgeHealth, LLMSelection } from '@/lib/llm/bridge';
+import { providersAvailable } from '@/lib/llm/cli';
+import type { LLMSelection } from '@/lib/llm/providers';
 
 const ACTIONS: LLMAction[] = ['generate', 'explain', 'fix', 'modify', 'ask'];
 
-// Which local CLIs the bridge can reach (used by Settings).
+// Which local AI CLIs are installed (used by Settings).
 export async function GET() {
-  return NextResponse.json(await bridgeHealth());
+  return NextResponse.json(providersAvailable());
 }
 
 // The route runs CLIs on the host, so only accept JSON from the app itself on loopback.

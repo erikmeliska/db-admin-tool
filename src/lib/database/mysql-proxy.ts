@@ -1,5 +1,6 @@
 import { ConnectionConfig, QueryResult, TableSchema, ColumnInfo, TableMetadata } from '@/types/database';
 import { DatabaseConnection } from './types';
+import { loadLocalSecrets } from '@/lib/local-secrets';
 
 export class MySQLProxyConnection implements DatabaseConnection {
   private config: ConnectionConfig;
@@ -31,6 +32,7 @@ export class MySQLProxyConnection implements DatabaseConnection {
   }> {
     // Env creds (IM_DB_PROXY_URL + IM_DB_PROXY_AUTH) are used only as a pair, so the
     // server-side Authorization header is never sent to a URL entered in the form.
+    loadLocalSecrets();
     const useEnv = !this.config.host;
     const url = useEnv ? process.env.IM_DB_PROXY_URL : this.config.host;
     const authHeader = useEnv

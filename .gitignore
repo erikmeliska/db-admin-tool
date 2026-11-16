@@ -50,7 +50,4 @@ next-env.d.ts
 /sessions/
 .encryption-key
 
-# local LLM bridge
-.llm-bridge-token
-.llm-bridge.log
 .playwright-mcp/
