@@ -27,7 +27,7 @@ A modern, AI-powered database administration tool built with Next.js, featuring 
 - **Case-sensitive table names** - Proper quoting for all database types
 
 ### 🤖 **AI-Powered Query Generation**
-- **Gemini 2.0 Flash Lite** integration
+- **Local AI CLIs** (Claude Code, Codex, Antigravity) via a host bridge
 - Natural language to SQL conversion
 - Schema-aware query generation
 - Context-sensitive table and column suggestions
@@ -73,7 +73,7 @@ A modern, AI-powered database administration tool built with Next.js, featuring 
 
 ### ⚙️ **Centralized Settings Management**
 - **Settings Dialog** - Unified configuration via cog wheel icon (⚙️)
-- **API Configuration** - Google AI API key management with show/hide toggle
+- **AI Provider** - pick the local CLI and model, with bridge status
 - **Theme Management** - Dark/Light/System theme selection with real-time preview
 - **Storage Management** - View usage and cleanup old session data
 - **About Information** - Version and build details
@@ -102,6 +102,23 @@ A modern, AI-powered database administration tool built with Next.js, featuring 
 
 ## 🚀 Quick Start
 
+### Local container with your AI CLIs (recommended)
+
+```bash
+./scripts/local-up.sh     # loads IM_DB_PROXY_URL / IM_DB_PROXY_AUTH from ~/.secrets,
+                          # starts the host LLM bridge, builds + runs the container
+open http://127.0.0.1:8008
+./scripts/local-down.sh   # stops the container and the bridge
+```
+
+- **AI** runs through the logged-in CLIs on the host: `claude` (Claude Code), `codex` or `agy` (Antigravity).
+  `llm-bridge/server.mjs` (no deps, `127.0.0.1:8787`, bearer token in `.llm-bridge-token`) spawns them
+  without tools in an empty temp dir; the container reaches it via `host.docker.internal`.
+  Pick the CLI and optional model in ⚙️ Settings → AI Provider.
+- **MySQL proxy**: with `IM_DB_PROXY_URL` + `IM_DB_PROXY_AUTH` (full `Authorization` header value) in the env,
+  leave proxy URL, username and password empty in the connection form. MySQL Server defaults to the first
+  two characters of the database name.
+
 ### Option 1: Pre-built Docker (Fastest) ⚡
 
 **Just run the image - no setup required!**
@@ -117,7 +134,7 @@ Open [http://localhost:8008](http://localhost:8008) and start querying!
 **Prerequisites:**
 - **Node.js** 18+ 
 - **npm** or **yarn**
-- **Google AI API Key** for AI features
+- **claude, codex or agy CLI** logged in on the host, for AI features
 
 **Installation:**
 
@@ -244,11 +261,11 @@ The CI/CD pipeline ensures:
 
 ### API Configuration
 
-**Google AI API Key**: Configure via the Settings dialog (⚙️ icon) in the web interface after starting the application. The API key is stored securely in your browser's localStorage and sent with each AI request.
+**AI provider**: no API key. Choose Claude Code / Codex / Antigravity CLI in the Settings dialog (⚙️); requests go through the host LLM bridge (`LLM_BRIDGE_URL`, `LLM_BRIDGE_TOKEN`, see `.env.example`).
 
 **Session Encryption**: The application automatically generates a secure encryption key on first run to protect stored database credentials. The key is saved to `sessions/.encryption-key` and should be backed up for data recovery.
 
-**No environment variables required** - all configuration is handled automatically or through the UI.
+Optional env: `IM_DB_PROXY_URL` / `IM_DB_PROXY_AUTH` (MySQL proxy creds), `LLM_BRIDGE_*` (AI), see `.env.example`.
 
 ### Secure Database Connections
 
@@ -353,7 +370,7 @@ The tool uses a **session-based security model**:
 
 ### 6. **Settings & Configuration**
 - **Access Settings** via the cog wheel (⚙️) icon in the top-right header
-- **Configure Google API Key** for AI features with secure local storage
+- **Pick the AI CLI** (Claude Code, Codex, Antigravity) in Settings
 - **Theme Selection** - Choose Light, Dark, or System theme with instant preview
 - **Storage Management** - View current usage and cleanup old session data
 - **Version Information** - Check current version and build details
@@ -384,7 +401,7 @@ This application implements **enterprise-grade security**:
 
 **v2.3.0 - Centralized Settings & Enhanced UX**
 - ✅ Centralized Settings dialog with cog wheel icon (⚙️) access
-- ✅ Google AI API key management with secure local storage
+- ✅ Local AI CLIs via host bridge, no API key
 - ✅ Integrated theme management (Light/Dark/System) with instant switching
 - ✅ Storage management with usage display and cleanup functionality
 - ✅ Clean header design with consolidated controls
@@ -457,5 +474,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Next.js** team for the amazing React framework
 - **shadcn/ui** for beautiful, accessible UI components
 - **CodeMirror** for the powerful SQL editor
-- **Google AI** for Gemini integration
+- **Claude Code, Codex, Antigravity** CLIs for AI features
 - **Tailwind CSS** for utility-first styling

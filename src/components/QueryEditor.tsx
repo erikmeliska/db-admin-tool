@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { getLLMSettings } from '@/lib/llm/client-settings';
 import { ConnectionSession, QueryResult } from '@/types/database';
 import { queryHistoryManager } from '@/lib/query-history';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -303,16 +304,6 @@ export function QueryEditor({
         };
       });
       
-      // Get API key from localStorage
-      const apiKey = localStorage.getItem('google-api-key');
-      if (!apiKey) {
-        setAiOperations(prev => ({ 
-          ...prev, 
-          explanation: 'Google API key not configured. Please set it in Settings.',
-          isExplaining: false 
-        }));
-        return;
-      }
 
       const response = await fetch('/api/llm', {
         method: 'POST',
@@ -326,7 +317,7 @@ export function QueryEditor({
           query: editorContentRef.current,
           schema,
           databaseType: session.type,
-          apiKey
+          llm: getLLMSettings(),
         }),
       });
 
@@ -368,12 +359,6 @@ export function QueryEditor({
         };
       });
       
-      // Get API key from localStorage
-      const apiKey = localStorage.getItem('google-api-key');
-      if (!apiKey) {
-        setAiOperations(prev => ({ ...prev, isFixing: false }));
-        return;
-      }
 
       const response = await fetch('/api/llm', {
         method: 'POST',
@@ -387,7 +372,7 @@ export function QueryEditor({
           query: editorContentRef.current,
           schema,
           databaseType: session.type,
-          apiKey
+          llm: getLLMSettings(),
         }),
       });
 
@@ -398,7 +383,7 @@ export function QueryEditor({
         if (fixedQuery.trim()) {
           // Update both ref and state
           editorContentRef.current = fixedQuery;
-          setTabs(prev => prev.map(tab => 
+          updateTabs(tabs.map(tab =>
             tab.id === activeTab ? { ...tab, query: fixedQuery } : tab
           ));
         }
@@ -410,7 +395,7 @@ export function QueryEditor({
       console.error('Query fix failed:', error);
       setAiOperations(prev => ({ ...prev, isFixing: false }));
     }
-  }, [session, availableTables, tableSchemas, getUsedTableSchemas, activeTab]);
+  }, [session, availableTables, tableSchemas, getUsedTableSchemas, activeTab, tabs, updateTabs]);
 
   const modifyQuery = useCallback(async () => {
     if (!session || !editorContentRef.current.trim() || !aiOperations.modifyPrompt.trim()) return;
@@ -429,12 +414,6 @@ export function QueryEditor({
         };
       });
       
-      // Get API key from localStorage
-      const apiKey = localStorage.getItem('google-api-key');
-      if (!apiKey) {
-        setAiOperations(prev => ({ ...prev, isModifying: false }));
-        return;
-      }
 
       const response = await fetch('/api/llm', {
         method: 'POST',
@@ -448,7 +427,7 @@ export function QueryEditor({
           query: editorContentRef.current,
           schema,
           databaseType: session.type,
-          apiKey
+          llm: getLLMSettings(),
         }),
       });
 
@@ -472,7 +451,7 @@ export function QueryEditor({
       console.error('Query modification failed:', error);
       setAiOperations(prev => ({ ...prev, isModifying: false }));
     }
-  }, [session, availableTables, tableSchemas, getUsedTableSchemas, activeTab, aiOperations.modifyPrompt]);
+  }, [session, availableTables, tableSchemas, getUsedTableSchemas, activeTab, aiOperations.modifyPrompt, tabs, updateTabs]);
 
   const executeQuery = async () => {
     // Sync editor content to state and get current query
@@ -597,16 +576,6 @@ export function QueryEditor({
     setAiOperations(prev => ({ ...prev, isAsking: true, askResponse: '' }));
     
     try {
-      // Get API key from localStorage
-      const apiKey = localStorage.getItem('google-api-key');
-      if (!apiKey) {
-        setAiOperations(prev => ({ 
-          ...prev, 
-          askResponse: 'Google API key not configured. Please set it in Settings.',
-          isAsking: false 
-        }));
-        return;
-      }
 
       const response = await fetch('/api/llm', {
         method: 'POST',
@@ -620,7 +589,7 @@ export function QueryEditor({
           databaseType: session?.type,
           action: 'ask',
           query: editorContentRef.current,
-          apiKey
+          llm: getLLMSettings(),
         }),
       });
 

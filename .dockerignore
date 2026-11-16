@@ -61,3 +61,8 @@ Dockerfile
 # Other
 coverage/
 .nyc_output/ 
+# local secrets / bridge
+.env
+.llm-bridge-token
+.llm-bridge.log
+sessions

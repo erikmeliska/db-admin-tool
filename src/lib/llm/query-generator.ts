@@ -1,122 +1,137 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { DatabaseType, TableSchema } from '@/types/database';
+import { DatabaseType, TableSchema, ColumnInfo } from '@/types/database';
+import { complete, stripCodeFence, LLMSelection } from './bridge';
 
-const MODEL = "gemini-2.0-flash-lite";
+// Clients send schemas in two shapes: TableSchema ({ name, columns: [] }) from the
+// generator, and { tableName, columns: TableSchema } from the editor. Accept both.
+type LooseSchema = {
+  name?: string;
+  tableName?: string;
+  columns?: ColumnInfo[] | { columns?: ColumnInfo[] };
+  foreignKeys?: TableSchema['foreignKeys'];
+};
 
-// Note: This file is kept for backward compatibility, but the main LLM functionality
-// now uses API keys sent from the client via the /api/llm route
+function normalize(schema: LooseSchema[] | undefined): TableSchema[] {
+  if (!Array.isArray(schema)) return [];
+  return schema
+    .map((s) => {
+      const columns = Array.isArray(s.columns) ? s.columns : s.columns?.columns ?? [];
+      const foreignKeys = s.foreignKeys ?? (s.columns && !Array.isArray(s.columns) ? (s.columns as TableSchema).foreignKeys : undefined);
+      return { name: s.name ?? s.tableName ?? '', columns, foreignKeys };
+    })
+    .filter((s) => s.name);
+}
 
-export const generateQueryPrompt = (
-  description: string,
-  schema: TableSchema[],
-  databaseType: DatabaseType
-) => {
-  const schemaDescription = schema.map(table => {
-    const columns = table.columns.map(col => {
-      let colDef = `  ${col.name} ${col.type}`;
-      if (col.key === 'PRI') colDef += ' PRIMARY KEY';
-      if (col.autoIncrement) colDef += ' AUTO_INCREMENT';
-      if (!col.nullable) colDef += ' NOT NULL';
-      if (col.default !== null && col.default !== undefined) colDef += ` DEFAULT ${col.default}`;
-      return colDef;
-    }).join('\n');
+export function schemaAsDDL(schema: TableSchema[]): string {
+  return schema
+    .map((table) => {
+      const columns = table.columns
+        .map((col) => {
+          let colDef = `  ${col.name} ${col.type}`;
+          if (col.key === 'PRI') colDef += ' PRIMARY KEY';
+          if (col.autoIncrement) colDef += ' AUTO_INCREMENT';
+          if (!col.nullable) colDef += ' NOT NULL';
+          if (col.default !== null && col.default !== undefined) colDef += ` DEFAULT ${col.default}`;
+          return colDef;
+        })
+        .join(',\n');
+      const foreignKeys =
+        table.foreignKeys
+          ?.map((fk) => `  FOREIGN KEY (${fk.column}) REFERENCES ${fk.referencedTable}(${fk.referencedColumn})`)
+          .join(',\n') || '';
+      return `CREATE TABLE ${table.name} (\n${columns}${foreignKeys ? ',\n' + foreignKeys : ''}\n);`;
+    })
+    .join('\n\n');
+}
 
-    const foreignKeys = table.foreignKeys?.map(fk => 
-      `  FOREIGN KEY (${fk.column}) REFERENCES ${fk.referencedTable}(${fk.referencedColumn})`
-    ).join('\n') || '';
+const SQL_ONLY = 'Return ONLY the SQL query as plain text: no markdown fences, no comments, no explanations.';
 
-    return `
-CREATE TABLE ${table.name} (
-${columns}${foreignKeys ? '\n' + foreignKeys : ''}
-);`;
-  }).join('\n');
-
+export function generateQueryPrompt(description: string, schema: TableSchema[], databaseType: DatabaseType) {
   return `You are an expert SQL developer. Generate a ${databaseType} query based on the user's request.
 
-IMPORTANT: You must ONLY use the tables and columns provided in the schema below. Do NOT hallucinate or invent table names or column names that are not explicitly listed.
+IMPORTANT: Use ONLY the tables and columns in the schema below. Never invent table or column names.
 
 USER REQUEST: ${description}
 
 DATABASE SCHEMA (${databaseType}):
-${schemaDescription}
+${schemaAsDDL(schema)}
 
-AVAILABLE TABLES: ${schema.map(t => t.name).join(', ')}
+AVAILABLE TABLES: ${schema.map((t) => t.name).join(', ')}
 
 RULES:
-1. ONLY use table names and column names that exist in the schema above
-2. Use proper ${databaseType} SQL syntax
-3. Include appropriate JOINs when working with multiple tables
-4. Use foreign key relationships when joining tables
-5. Add LIMIT clause for SELECT queries (LIMIT 100)
-6. Return ONLY the SQL query, no explanations or comments
-7. If the request cannot be fulfilled with the available schema, return: -- ERROR: Cannot generate query with available tables
+1. Use proper ${databaseType} SQL syntax
+2. Include appropriate JOINs when working with multiple tables, using foreign key relationships
+3. Add LIMIT 100 to SELECT queries
+4. If the request cannot be fulfilled with the available schema, return: -- ERROR: Cannot generate query with available tables
+5. ${SQL_ONLY}`;
+}
 
-SQL Query:`;
-};
+export type LLMAction = 'generate' | 'explain' | 'fix' | 'modify' | 'ask';
 
-export async function generateSQLQuery(
-  description: string,
-  schema: TableSchema[],
-  databaseType: DatabaseType,
-  apiKey?: string
-): Promise<string> {
-  // This function is deprecated in favor of the /api/llm route
-  // but kept for backward compatibility
-  
-  const effectiveApiKey = apiKey || process.env.GOOGLE_API_KEY;
-  if (!effectiveApiKey) {
-    throw new Error('Google API key is required. Please configure it in Settings.');
-  }
+export interface LLMRequest {
+  action: LLMAction;
+  description: string;
+  databaseType: DatabaseType;
+  schema?: LooseSchema[];
+  query?: string;
+}
 
-  try {
-    const genAI = new GoogleGenerativeAI(effectiveApiKey);
-    const prompt = generateQueryPrompt(description, schema, databaseType);
-    
-    const model = genAI.getGenerativeModel({ 
-      model: MODEL,
-      generationConfig: {
-        temperature: 0,
-        maxOutputTokens: 800,
-      },
-    });
+export function buildPrompt({ action, description, databaseType, schema, query }: LLMRequest): string {
+  const tables = normalize(schema);
+  const schemaBlock = tables.length ? `Database schema:\n${schemaAsDDL(tables)}\n\n` : '';
 
-    const systemInstruction = 'You are an expert SQL developer. You generate accurate SQL queries based on provided database schemas. You never hallucinate table names or column names that are not provided in the schema.';
-    
-    const fullPrompt = `${systemInstruction}\n\n${prompt}`;
-    
-    const result = await model.generateContent(fullPrompt);
-    const response = await result.response;
-    let generatedQuery = response.text().trim();
-    
-    // Clean up markdown formatting from Gemini
-    generatedQuery = generatedQuery
-      .replace(/^```sql\s*/i, '')  // Remove opening ```sql
-      .replace(/\s*```$/, '')      // Remove closing ```
-      .trim();
-    
-    if (!generatedQuery) {
-      throw new Error('No query generated');
-    }
+  switch (action) {
+    case 'generate':
+      return generateQueryPrompt(description, tables, databaseType);
+    case 'explain':
+      return `You are an expert SQL analyst. Explain this ${databaseType} query in simple, clear terms.
 
-    return generatedQuery;
-  } catch (error) {
-    throw new Error(`Failed to generate SQL query: ${error}`);
+${schemaBlock}SQL query:
+${query}
+
+Cover: what data it retrieves or modifies, which tables and columns are involved, how the JOINs work, filtering and grouping, and the business purpose. Write for a non-technical reader, use markdown.`;
+    case 'fix':
+      return `You are an expert SQL developer. Analyze and fix any issues in this ${databaseType} query (syntax, wrong table or column names, JOIN issues, logic errors, performance).
+
+${schemaBlock}Current query:
+${query}
+
+Instructions:
+${description}
+
+${SQL_ONLY}`;
+    case 'modify':
+      return `You are an expert SQL developer. Modify this ${databaseType} query according to the request.
+
+${schemaBlock}Current query:
+${query}
+
+Modification request:
+${description}
+
+${SQL_ONLY}`;
+    case 'ask':
+      return `You are an expert SQL analyst. Answer the user's question about this ${databaseType} query.
+
+${schemaBlock}SQL query:
+${query}
+
+Question:
+${description}
+
+Give a detailed, helpful answer formatted in markdown.`;
   }
 }
 
-export function explainQuery(query: string, databaseType: DatabaseType): string {
-  // Simple query explanation logic
-  const lowerQuery = query.toLowerCase().trim();
-  
-  if (lowerQuery.startsWith('select')) {
-    return `This is a SELECT query for ${databaseType} that retrieves data from the database.`;
-  } else if (lowerQuery.startsWith('insert')) {
-    return `This is an INSERT query for ${databaseType} that adds new data to the database.`;
-  } else if (lowerQuery.startsWith('update')) {
-    return `This is an UPDATE query for ${databaseType} that modifies existing data in the database.`;
-  } else if (lowerQuery.startsWith('delete')) {
-    return `This is a DELETE query for ${databaseType} that removes data from the database.`;
-  } else {
-    return `This is a ${databaseType} database query.`;
+export async function runLLMAction(request: LLMRequest, selection?: LLMSelection) {
+  const text = await complete(buildPrompt(request), selection);
+  switch (request.action) {
+    case 'generate':
+      return { query: stripCodeFence(text), explanation: `Generated ${request.databaseType} query based on: "${request.description}"` };
+    case 'fix':
+    case 'modify':
+      return { query: stripCodeFence(text) };
+    case 'explain':
+    case 'ask':
+      return { explanation: text };
   }
-} 
+}

@@ -1,13 +1,23 @@
-version: '3.8'
-
+# Local run: use ./scripts/local-up.sh (loads ~/.secrets, starts the host LLM bridge, then this).
 services:
   db-admin-tool:
     build: .
+    image: db-admin-tool:local
+    container_name: db-admin-tool
     ports:
-      - "8008:8008"
+      - "127.0.0.1:8008:8008"
     environment:
       - NODE_ENV=production
       - PORT=8008
+      # MySQL proxy creds, passed through from the shell (~/.secrets)
+      - IM_DB_PROXY_URL
+      - IM_DB_PROXY_AUTH
+      # Host LLM bridge (llm-bridge/server.mjs) running the local claude / codex / agy CLIs
+      - LLM_BRIDGE_URL=http://host.docker.internal:${LLM_BRIDGE_PORT:-8787}
+      - LLM_BRIDGE_TOKEN
+      - LLM_DEFAULT_PROVIDER=${LLM_DEFAULT_PROVIDER:-claude}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./sessions:/app/sessions
-    restart: unless-stopped 
+    restart: unless-stopped
